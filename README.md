@@ -1,43 +1,188 @@
 # Seller Command Center
 
-A "chief of staff" for an online shop owner, built with the **Claude Agent SDK (Python)**.
+**A multi-agent "chief of staff" for an online shop owner, built with the Claude Agent SDK
+(Python).**
 
-You ask a business question ("What should I restock for December?"). A **hub** agent breaks it
-down and delegates to five **specialist sub-agents** that analyse real e-commerce data. The hub
-then writes an action brief. Anything that changes state (saving a listing draft, creating a
-purchase order) needs your **approval** through Approve/Deny buttons in the UI.
+The seller asks a business question in plain English. A **hub** agent decides which
+**specialist agents** to involve and gives each a precise task. The specialists run
+deterministic analytics over **real e-commerce data** (1M+ transactions) and report back.
+The hub combines their findings into a short brief with recommended next steps. Anything that
+changes something, such as a draft purchase order or a product listing, happens **only after
+the seller clicks Approve**.
 
-> **Status:** work in progress. Milestones 1-4 of 7 are done: the agent system works from the terminal. The web UI is next.
-> See [docs/PLAN.md](docs/PLAN.md) for the full plan and [DESIGN.md](DESIGN.md) for the design decisions.
+> **Status:** milestones 1-5 of 7 are done. The system works end to end in the web UI and the
+> terminal. Still to come: an evaluation suite (6) and Docker packaging (7).
+> Design decisions: [DESIGN.md](DESIGN.md) · Build plan and progress: [docs/PLAN.md](docs/PLAN.md)
 
-## Architecture (summary)
+---
+
+## Contents
+1. [The use case](#1-the-use-case)
+2. [What it looks like in practice](#2-what-it-looks-like-in-practice)
+3. [How it works](#3-how-it-works)
+4. [Quick start](#4-quick-start)
+5. [Using the web UI](#5-using-the-web-ui)
+6. [Using the terminal client](#6-using-the-terminal-client)
+7. [The JSON API](#7-the-json-api)
+8. [Configuration](#8-configuration)
+9. [Testing and verification](#9-testing-and-verification)
+10. [Costs](#10-costs)
+11. [Project layout](#11-project-layout)
+12. [Limitations](#12-limitations)
+13. [Data and licences](#13-data-and-licences)
+
+---
+
+## 1. The use case
+
+### Who it is for
+The owner of a small online gift shop: a UK business that sells mainly to wholesale buyers
+across Europe, with a few thousand products and a few thousand repeat customers. They have
+plenty of data and no analyst. Every week they have the same kinds of questions:
+
+| The seller wants to know... | Which specialist answers |
+|---|---|
+| "Why did revenue in Germany drop last month?" | **Sales analyst**: revenue, orders, trends, drivers of a change (it can write read-only SQL) |
+| "Who are my best customers, and who is about to leave?" | **Customer insights**: RFM segments, cohort retention, repeat-purchase rate |
+| "What should I restock for December, and how many?" | **Inventory planner**: demand history and seasonal forecasts |
+| "What should this cost in euros? Are my bulk prices working?" | **Pricing strategist**: price history, bulk price tiers, live exchange rates |
+| "Write a listing for my best seller." | **Listing writer**: listings built only from real sales facts |
+
+A **chief of staff** (the hub agent) sits in front of the specialists. It works out which of
+them a question needs, runs independent ones in parallel, and turns their reports into one
+brief the seller can act on.
+
+### What it can do for the seller
+- **Answer questions with exact figures** from the shop's own data, with periods and caveats
+  stated (for example "December is a partial month", "guest checkouts excluded").
+- **Explain changes**, not just report them, by breaking a change down by country, product,
+  customer and order size.
+- **Recommend actions** and, when asked, **prepare them**: a draft purchase order based on
+  the forecast, or a listing draft saved for later.
+- **Remember standing preferences** ("focus on UK and Germany", "our target margin is 40%")
+  across chats.
+- **Show its work**: every specialist and every tool call it made can be expanded in the UI,
+  with the exact inputs and outputs.
+
+### What makes it trustworthy (the design rules)
+1. **The hub has no data tools.** It must delegate, and this is enforced in code, not just
+   asked for in the prompt.
+2. **Specialists only read; the hub acts, and only with approval.** Write actions need a click
+   on **Approve**, and the write tool checks a one-time approval token as well.
+3. **Least privilege.** No shell, file or web tools exist. Each specialist sees only its own
+   tools.
+4. **Numbers come from code, not from the model.** Metrics (RFM, cohorts, forecasts, revenue)
+   are deterministic, tested functions. The model chooses and explains them; it doesn't do
+   the arithmetic.
+5. **SQL is read-only, enforced twice**: a locked-down database connection plus a SQL parser
+   check before every query.
+6. **"Today" is fixed at 2011-12-09**, the last day in the data, so answers are reproducible.
+
+Each rule is explained, with the alternatives considered, in [DESIGN.md](DESIGN.md).
+
+---
+
+## 2. What it looks like in practice
+
+**Question:** *"Why did revenue in Germany change in Nov 2011 vs Oct, and what should I
+restock?"*
+
+1. The hub starts the **Sales analyst** and the **Inventory planner** at the same time.
+2. The sales analyst calls `revenue_summary` for both months, then writes three SQL queries
+   to find the drivers (products, customers, order sizes).
+3. The inventory planner forecasts December demand for the top sellers and checks Germany's
+   monthly history for each.
+4. The hub replies (shortened):
+
+> **Germany's net revenue fell 16.8% in November**, from £28,016 (1–31 Oct 2011) to £23,304
+> (1–30 Nov 2011). Orders rose from 56 to 64, but orders got smaller and refunds more than
+> doubled...
+>
+> **Restock:** WW2 Gliders (~2,900 more units expected in December), Mini Paint Set (~2,900),
+> ... Small Popcorn Holder has already sold past its December forecast, so treat that as a
+> minimum.
+>
+> **Recommended next steps:** ... Tell me if you want a draft purchase order for these
+> products (it needs your approval). Check stock on hand first; I have no stock data.
+
+It took 29 seconds and cost $0.07. Every figure above appears in the tools' outputs.
+
+**Follow-up (illustrative):** *"Yes, create a draft PO for those four, 2,000 units each."*
+The hub calls `create_purchase_order`, and the UI shows:
+
+> **Approval needed**
+> Create a DRAFT purchase order: 4 line(s), 8,000 units in total. ...
+> [✅ Approve] [❌ Deny]
+
+Nothing is written until the seller clicks. If they deny, the hub says so and doesn't retry.
+
+---
+
+## 3. How it works
 
 ```
-seller ─▶ HUB "chief_of_staff" (Sonnet), with no data tools, so it must delegate
-   ┌────────┬──────────────┬───────────────┬──────────────┐
-   ▼        ▼              ▼               ▼              ▼
-sales_    customer_     inventory_      pricing_       listing_
-analyst   insights      planner         strategist     writer
+                         seller (web UI or terminal)
+                                     │
+                                     ▼
+          ┌─────────────────── HUB: chief of staff (Sonnet) ───────────────────┐
+          │ tools: Agent (start specialists), remember/forget_preference,      │
+          │        save_listing_draft*, create_purchase_order*                 │
+          │        (* = seller must click Approve)                             │
+          └──────┬────────────┬──────────────┬──────────────┬───────────┬──────┘
+                 ▼            ▼              ▼              ▼           ▼
+           sales_analyst  customer_     inventory_     pricing_     listing_
+           (Sonnet)       insights      planner        strategist   writer
+                          (Haiku)       (Haiku)        (Haiku)      (Haiku)
+           revenue_summary rfm_segments forecast_demand price_history get_product
+           describe_schema segment_...  demand_history  fx_rates ──► Frankfurter
+           run_sql         cohort_...   search_products search_...   (live FX)
+                           repeat_...                                top_products
+                 │            │              │              │           │
+                 └────────────┴──── read-only DuckDB (1,044,848 rows) ──┘
 ```
 
-- **Data:** [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii)
-  (about 1.07M transactions, 2009-12-01 to 2011-12-09, CC BY 4.0), loaded into DuckDB.
-- **Live API:** [Frankfurter](https://frankfurter.dev) exchange rates (no key needed).
-- **UI:** Chainlit, mounted in FastAPI on one port.
-- **Only one key is needed:** `ANTHROPIC_API_KEY`.
+| Layer | Technology |
+|---|---|
+| Agents | Claude Agent SDK: `ClaudeSDKClient` for chats, sub-agents via `AgentDefinition` |
+| Tools | 18 in-process MCP tools (`@tool` + `create_sdk_mcp_server`): 14 read-only for the specialists, 4 for the hub |
+| Permissions | One `can_use_tool` policy for every call, plus `PreToolUse` hooks (hub guard, SQL guard) |
+| Analytics data | DuckDB, read-only, built from UCI Online Retail II |
+| App state | SQLite: chats, costs, preferences, approvals, drafts, purchase orders, audit log |
+| Live API | Frankfurter (European Central Bank exchange rates, no key) |
+| UI | Chainlit (pure Python), mounted inside FastAPI on one port |
 
-## Quick start (development)
+How a request flows, including where approvals and audit records come from, is covered
+milestone by milestone in [DESIGN.md](DESIGN.md).
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.13.
+---
+
+## 4. Quick start
+
+### Prerequisites
+- macOS or Linux, **Python 3.13**, and [uv](https://docs.astral.sh/uv/)
+- An **Anthropic API key**. That's the only key needed. The Claude Code CLI comes bundled
+  with the SDK, so Node isn't needed.
+- About 200 MB of disk space for the dataset and database
+
+### Steps
 
 ```bash
-cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
-uv sync                       # create .venv and install pinned dependencies
-uv run pytest                 # offline unit tests (no API calls)
-uv run python -m scc.data.ingest   # download the dataset once and build data/retail.duckdb
+# 1. Install (creates .venv with the exact versions from uv.lock)
+uv sync
+
+# 2. Configure: add your key to .env (this file is git-ignored)
+cp .env.example .env
+#    then edit .env:  ANTHROPIC_API_KEY=sk-ant-...
+
+# 3. Build the database: downloads ~45 MB once, takes 1-2 minutes
+uv run python -m scc.data.ingest
+
+# 4. Start the web UI and API
+uv run uvicorn scc.api.app:create_app --factory --port 8000
+#    open http://localhost:8000
 ```
 
-Ingest downloads about 45 MB and takes 1-2 minutes. Expected output:
+Expected output of step 3:
 
 ```
       transactions: 1044848
@@ -49,36 +194,203 @@ Ingest downloads about 45 MB and takes 1-2 minutes. Expected output:
          customers: 5852
 ```
 
-### Terminal client (live: uses your API credit)
+Check that everything is up:
 
 ```bash
-uv run scc ask "Why did revenue in Germany change in Nov 2011 vs Oct, and what should I restock?"
-uv run scc ask -v "..."        # also show every specialist tool call
-uv run scc chat                # multi-turn chat; /exit to leave
-uv run scc chat --resume <id>  # continue an earlier chat
-uv run scc sessions            # recent chats and their cost
+curl http://localhost:8000/health
+# {"status":"ok","version":"0.1.0","as_of":"2011-12-09","retail_db":true,"app_db":true}
 ```
 
-A typical question takes 20-40 seconds and costs about $0.03-0.10. Actions (draft purchase
-orders, listing drafts) ask for approval with a y/N prompt.
+Run commands from the project root: Chainlit reads `.chainlit/config.toml` and `chainlit.md`
+from the working directory. The `Makefile` has shortcuts for everything: `make install`,
+`make ingest`, `make serve`, `make test`, `make chat`.
 
-More commands (UI, evals, Docker) will be added as the milestones land.
+---
 
-## Project layout
+## 5. Using the web UI
+
+Open **http://localhost:8000**.
+
+- **Starters.** Four example buttons on the welcome screen (revenue by country, December
+  restock, best customers, listing for the top product). Click one to try it.
+- **Ask anything** about sales, customers, stock, prices or listings. Follow-up questions keep
+  the context ("and what about France?").
+- **Watch the work.** Each specialist appears as a collapsible step, such as
+  *"Used Inventory planner · 4.1s"*. Expand it to see each tool it called, with the exact
+  input and output (JSON).
+- **Approve or deny actions.** When the hub wants to save a listing draft or create a draft
+  purchase order, you see a summary of exactly what will happen, then **✅ Approve /
+  ❌ Deny**. With no answer in 5 minutes, the action is denied. The summary stays in the chat
+  as a record.
+- **Stop.** The stop button interrupts a long answer. The conversation is kept.
+- **Preferences.** Say "remember that we focus on Germany and the UK" and it's applied to
+  every later question, in every chat. Say "forget that preference" to remove it.
+- **Cost.** Under each answer: number of turns, duration and cost, e.g. *3 turns · 29.0s ·
+  $0.0719*.
+
+**Optional login:** set `SCC_APP_USER`, `SCC_APP_PASSWORD` and `CHAINLIT_AUTH_SECRET`
+(generate it with `uv run chainlit create-secret`) in `.env`. The UI then asks for a
+password.
+
+### Good questions to try
+- *How has net revenue developed by month in 2011 for our top 5 countries?*
+- *Which customers in the "Can't lose them" segment spent the most, and when did they last order?*
+- *What should I restock for the rest of December? Then draft a purchase order for the top 3.*
+- *What does the Regency Cakestand cost in EUR and USD, and how do its bulk price tiers work?*
+- *Write a listing for our best-selling product of 2011 and save it as a draft.*
+- *Remember: our target margin is 40%.*
+
+---
+
+## 6. Using the terminal client
+
+The CLI uses the same runtime as the web UI.
+
+```bash
+uv run scc ask "Why did revenue in Germany change in Nov 2011 vs Oct?"
+uv run scc ask -v "..."          # verbose: also print every specialist tool call
+uv run scc chat                  # multi-turn chat; type /exit to leave
+uv run scc chat --resume <id>    # continue an earlier chat (our id or the SDK session id)
+uv run scc sessions              # recent chats with request count and total cost
+```
+
+Approvals appear as a `y/N` prompt. If no terminal is attached (piped input), they are denied.
+
+---
+
+## 7. The JSON API
+
+Read-only views of the app's state, served next to the UI. Interactive docs:
+**http://localhost:8000/docs**.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /health` | `ok` / `degraded` (HTTP 503) with database checks; used by container health checks |
+| `GET /api/sessions` | Recent chats with request count and cost |
+| `GET /api/sessions/{id}/trace` | One chat: every request (cost, turns, duration) and every audit record (tool calls, specialists, approvals, denials) |
+| `GET /api/purchase-orders` | Draft purchase orders, each linked to the approval that allowed it |
+| `GET /api/drafts` | Saved listing drafts |
+| `GET /api/approvals` | Every approval request and its decision (seller, timeout, policy) |
+| `GET /api/memory` | Saved seller preferences |
+| `GET /api/audit?limit=200` | Latest audit records across all chats |
+
+The API is **read-only on purpose**. The only way to change anything is through the agent and
+its approval flow, so every change is approved and audited. Set `SCC_API_TOKEN` to require
+`Authorization: Bearer <token>` on `/api/...`.
+
+---
+
+## 8. Configuration
+
+Everything is set through environment variables or `.env`. Defaults are in
+[src/scc/config.py](src/scc/config.py).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | (required) | The only API key the project needs |
+| `SCC_HUB_MODEL` | `claude-sonnet-5-5` | Hub (chief of staff) |
+| `SCC_ANALYST_MODEL` | `claude-sonnet-5-5` | Sales analyst (writes SQL) |
+| `SCC_SPOKE_MODEL` | `claude-haiku-5-5` | The other four specialists |
+| `SCC_MAX_TURNS` | `30` | Turn limit per request |
+| `SCC_MAX_BUDGET_USD` | `1.00` | Hard cost limit per request |
+| `SCC_MAX_CONCURRENT_REQUESTS` | `4` | Requests running at the same time, across all chats |
+| `SCC_APPROVAL_TIMEOUT_S` | `300` | Seconds before an unanswered approval is denied |
+| `SCC_DATA_DIR` | `./data` | DuckDB, SQLite and the downloaded dataset |
+| `SCC_FX_BASE_URL` | `https://api.frankfurter.dev/v1` | Exchange-rate service (fallback: `api.frankfurter.app`) |
+| `SCC_APP_USER` / `SCC_APP_PASSWORD` | unset | Turn on the UI login (with `CHAINLIT_AUTH_SECRET`) |
+| `SCC_API_TOKEN` | unset | Bearer token for `/api/...` |
+
+---
+
+## 9. Testing and verification
+
+### Offline unit tests (free, no network)
+
+```bash
+uv run pytest        # 228 tests, ~10 seconds
+make lint            # ruff check + format check
+```
+
+They need neither an API key nor network access. They cover: data cleaning rules, the
+business-rule views, the SQL guard (with injection attempts), every analytics function with
+hand-checked numbers, every tool handler including its error messages, the FX client
+(retries, fallback, cache; HTTP mocked), the permission policy table, approval tokens, hooks,
+the hub wiring, the event translator, the UI controller and the API routes.
+
+### Live checks (use API credit)
+
+| Command | What it proves | Cost |
+|---|---|---|
+| `uv run python scripts/check_sdk.py` | The SDK behaviours the design relies on (sub-agent tool name, `disallowed_tools` scope, `can_use_tool` inside sub-agents, hook payloads) | ~$0.01 |
+| `uv run scc ask "..."` | The whole agent system from the terminal | ~$0.03-0.10 |
+| `uv run python scripts/ui_e2e.py --url http://127.0.0.1:8000` | Against a running server, over the real websocket: approve one purchase order and deny another, then check that exactly one was written | ~$0.03 |
+
+---
+
+## 10. Costs
+
+Measured on real runs:
+
+| Request | Cost | Time |
+|---|---|---|
+| Simple action (draft PO, no analysis) | ~$0.01-0.03 | 3-10 s |
+| Two specialists, ~20 tool calls (the Germany example above) | ~$0.07 | ~30 s |
+| SDK behaviour checks (`check_sdk.py`) | ~$0.003 | ~30 s |
+
+Cost controls built in: Haiku for four of the five specialists, a hard `max_budget_usd` per
+request, a turn limit for each specialist and for the hub, and compact JSON tool results with
+row caps. Every request's cost is stored and shown under the answer and in
+`GET /api/sessions`.
+
+---
+
+## 11. Project layout
 
 ```
-src/scc/        application package (config, data, analytics, tools, agents, hooks, UI, API)
-tests/          offline pytest suite
-docs/PLAN.md    the approved build plan
-DESIGN.md       why things are built the way they are
+src/scc/
+  config.py              all settings (pydantic-settings)
+  data/                  ingest (UCI -> DuckDB), read-only connections + views, SQL guard
+  analytics/             deterministic metrics: sales, RFM, cohorts, forecast, pricing, catalog
+  integrations/fx.py     Frankfurter client (timeouts, retries, fallback, cache)
+  tools/                 MCP tools: one server per area + hub actions and memory
+  agents/                hub + 5 specialist definitions; prompts/*.md
+  permissions.py         can_use_tool policy + approval broker
+  hooks/                 hub guard, SQL guard, audit/tracing, memory injection
+  store/app_db.py        SQLite app state
+  runtime/               AgentSession (one ClaudeSDKClient per chat), SDK -> UI events
+  ui/                    Chainlit adapter, UI-agnostic chat controller
+  api/app.py             FastAPI: /health, /api/*, Chainlit mounted at /
+  cli.py                 `scc` terminal client
+scripts/                 check_sdk.py, ui_e2e.py (live checks)
+tests/                   offline pytest suite
+docs/PLAN.md             build plan + progress tracker
+DESIGN.md                every design decision, with the reasoning
 ```
 
-## Data licence
+---
 
-The UCI Online Retail II dataset is by Daqing Chen, licensed under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The data is downloaded at ingest time
-and is not committed to this repository.
+## 12. Limitations
 
-## Licence
+- **Historical data.** The dataset ends on 2011-12-09, and the app treats that day as
+  "today". Exchange rates also default to that date (live "latest" rates are available on
+  request).
+- **No stock levels or costs** in the data. Restock advice is expected demand to compare with
+  stock on hand, and margins are only discussed if the seller gives a cost or target.
+- **Drafts stay inside the app.** Purchase orders and listings are saved as drafts and
+  aren't sent to a supplier or shop platform.
+- **Simple forecasting.** Seasonal naive × trend is explainable and a strong baseline for
+  two years of strongly seasonal data, but it can't see a product suddenly taking off (it
+  reports units already sold so the agent can point this out).
+- **Single instance.** SQLite and in-memory approval futures assume one server process. See
+  DESIGN.md for what would change for a multi-instance deployment.
 
-Code: MIT. See [LICENSE](LICENSE).
+---
+
+## 13. Data and licences
+
+- **Data:** [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii)
+  by Daqing Chen, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It's downloaded
+  at ingest time and not stored in this repository.
+- **Exchange rates:** [Frankfurter](https://frankfurter.dev), European Central Bank reference
+  rates.
+- **Code:** MIT, see [LICENSE](LICENSE).

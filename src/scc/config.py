@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     app_user: str | None = None
     app_password: SecretStr | None = None
 
+    # Optional bearer token for the read-only JSON API (/api/...). When set, requests must send
+    # "Authorization: Bearer <token>". /health stays open for container health checks.
+    api_token: SecretStr | None = None
+
     # --- Derived paths --------------------------------------------------------------------------
     @property
     def duckdb_path(self) -> Path:

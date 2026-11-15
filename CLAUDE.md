@@ -3,7 +3,7 @@
 This file gives a new chat everything it needs. **The full approved plan is in [docs/PLAN.md](docs/PLAN.md). Read it before doing anything.**
 
 ## Current status
-- The plan was approved on 2026-11-15. Milestones 1-4 done on 2026-11-15. **Next step: Milestone 5 (Chainlit UI + FastAPI).** The runtime (`scc.runtime.AgentSession`, neutral events in `scc.runtime.events`, `ApprovalBroker.on_request`/`resolve`) is ready for the UI. Progress table: PLAN.md → "Progress tracker".
+- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **Next step: Milestone 6 (Evals with `query()` + `output_format`).** Use `auto_policy(False, "eval")` for approvals in evals. Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000`; headless UI check: `scripts/ui_e2e.py`. Progress table: PLAN.md → "Progress tracker".
 - Installed: `claude-agent-sdk` 0.2.182 (bundled CLI confirmed), project `.venv` on Python 3.13 via `uv`. Import package is `scc` (`src/scc/`); settings in `src/scc/config.py` use the `SCC_` env prefix (except `ANTHROPIC_API_KEY`).
 - Update the milestone checklist below as work progresses.
 
@@ -12,7 +12,7 @@ This file gives a new chat everything it needs. **The full approved plan is in [
 - [x] 2. Data layer: ingest UCI → DuckDB, views, SQL guard, analytics functions, unit tests
 - [x] 3. Tools and spokes: MCP servers, 5 AgentDefinitions, Frankfurter FX client
 - [x] 4. Hub, hooks, permissions, memory, `scripts/check_sdk.py`, CLI smoke test
-- [ ] 5. Seller UI (Chainlit) and FastAPI with Chainlit mounted
+- [x] 5. Seller UI (Chainlit) and FastAPI with Chainlit mounted
 - [ ] 6. Evals (`query()` + `output_format`), report
 - [ ] 7. Docker, compose, README, DESIGN.md
 

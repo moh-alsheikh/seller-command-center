@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from string import Template
 
@@ -72,6 +73,12 @@ class HubRuntime:
     @property
     def spoke_tool_names(self) -> list[str]:
         return [n for server in self.read_servers.values() for n in server.qualified_names]
+
+
+@lru_cache(maxsize=1)
+def get_runtime() -> HubRuntime:
+    """The process-wide runtime shared by the web UI and the API (built on first use)."""
+    return HubRuntime.create()
 
 
 def build_options(

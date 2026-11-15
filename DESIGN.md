@@ -377,3 +377,78 @@ ran both specialists **in parallel**. Together they made about 20 tool calls, in
 SQL queries for drivers. Every figure in the answer matches the tools (net £28,016 → £23,304,
 −16.8%). The hub proposed a purchase order and didn't create it unasked. It took 29 s and cost
 **$0.072**. All live runs in M4 together cost about $0.12.
+
+---
+
+## Milestone 5: seller UI (Chainlit) and API (FastAPI)
+
+### Shape: a thin Chainlit adapter around a UI-agnostic controller
+```
+AgentSession.ask() ──events──► ChatController.handle() ──calls──► ChatView (ChainlitView)
+```
+- `ui/controller.py` decides **what** to show. For example: close the current answer bubble
+  before a step appears (so the screen order matches what happened), nest tool calls under
+  their specialist's step using `parent_tool_use_id`, rename a finished step to
+  "Used Inventory planner · 3.2s", and show friendly text for `error_max_budget_usd` and
+  similar results.
+- `ui/chainlit_app.py` decides **how**, using Chainlit messages, steps and
+  `AskActionMessage`.
+- Because of this split, the logic is unit-tested with a fake view, and swapping Chainlit for
+  another UI would mean rewriting one small file.
+
+### Approvals from outside Chainlit's handler
+`can_use_tool` runs in the SDK's own task, not in `on_message`, so Chainlit's context
+variables can't be assumed to be there. This was flagged as a risk in the plan. The view
+re-enters the chat's context explicitly with `chainlit.context.init_ws_context(session)`
+before showing the buttons. The broker's `on_request` returns immediately and shows the
+buttons in a separate task, which resolves the approval when clicked.
+
+**Verified headlessly** with `scripts/ui_e2e.py`. It speaks Chainlit's real socket.io
+protocol (connect, `connection_successful`, `client_message`, answering the `ask` call with
+an action), approves one purchase order and denies another, then checks through the API that
+exactly one was written. Result: **PASS** (about $0.03).
+
+The script also found two real issues, now fixed:
+1. **A race between `on_chat_start` and `on_message`.** Chainlit runs `on_chat_start` as its
+   own task, so a client that sends straight after connecting reaches `on_message` first, and
+   the session was `None`. Both handlers now use `_chat_state()`, which creates the state if
+   it's missing.
+2. **The record of what was approved disappeared.** After a click, `AskActionMessage`
+   replaces its own content with "Selected: Approve". The approval summary is now posted as a
+   separate message that stays in the chat, and the button message only asks "Do you approve
+   this action?".
+
+### Other UI decisions
+- **Lazy CLI start:** the SDK client (a Claude Code subprocess) starts on the first message,
+  not when the chat opens, so idle tabs cost nothing.
+- **Token streaming for the hub only** (`include_partial_messages=True`). Specialist activity
+  appears as steps, not streamed text.
+- **Stop = interrupt + close.** Chainlit cancels `on_message` mid-stream, which can leave the
+  SDK client half-way through a response. Closing it and reconnecting with `resume=` on the
+  next message is the clean way out; the conversation is kept.
+- **Errors:** a failed request shows a short apology, closes the client and reconnects with
+  `resume=` next time. Details go to the server log, not the chat.
+- **No file uploads** (`spontaneous_file_upload.enabled = false`): no agent reads files, so
+  accepting them would only add attack surface.
+- **Optional password login** with `hmac.compare_digest` (constant-time comparison).
+
+### API (`api/app.py`)
+- `create_app(runtime=None, mount_ui=True)` is an **app factory**, run with
+  `uvicorn --factory`. Tests build the app with their own runtime and no Chainlit.
+- **One process, one port:** the API routes are registered first, then Chainlit is mounted at
+  `/` with `mount_chainlit`. Starlette matches routes in the order they were added, so
+  `/health`, `/api/*` and `/docs` win and everything else goes to the UI.
+- **Read-only by design:** the API only lists things. There is exactly one way to change
+  state (the agent plus approval), and it is audited.
+- `/health` returns **503** when the retail database is missing, for the container health
+  check in milestone 7.
+- An optional **bearer token** (`SCC_API_TOKEN`) protects `/api/*`. `/health` stays open.
+- One pitfall: with `from __future__ import annotations`, FastAPI resolves annotations by name
+  from the module, so a `Limit = Annotated[...]` alias defined *inside* `create_app` broke
+  query parsing. It's now at module level.
+
+### What would change for production at scale
+- Approval futures live in process memory, so a multi-instance deployment would need sticky
+  sessions or a shared store (Redis pub/sub or Postgres `LISTEN/NOTIFY`) for `resolve()`.
+- SQLite becomes Postgres. Chat history would persist through Chainlit's data layer plus SDK
+  `resume=`, so a reloaded tab shows earlier chats.

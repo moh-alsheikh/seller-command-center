@@ -49,6 +49,8 @@ filterwarnings = [
     # Raised inside DuckDB's own .df(date_as_object=True) (it calls DataFrame.drop(inplace=...)).
     # Not our code; remove this line once DuckDB stops using the deprecated keyword.
     "ignore:The inplace keyword in DataFrame.drop is deprecated",
+    # Raised by FastAPI's own TestClient import (Starlette wants a newer HTTP client package).
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
 
 [tool.ruff]

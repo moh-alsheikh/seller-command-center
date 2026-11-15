@@ -114,8 +114,8 @@ Update this table when a milestone starts or finishes. A commit can't contain it
 | 1 | Scaffold | ✅ | 2026-11-15 | `90419d6` | 8 pass | SDK 0.2.182 (bundled CLI confirmed); `SCC_` env prefix; package `scc` |
 | 2 | Data layer | ✅ | 2026-11-15 | `40e3d6b` | 113 pass | 1,044,848 rows after removing the 22,523-row sheet overlap; revenue cross-checked against raw data (£19,700,954.46); rankings and forecasts use net values (same-day bulk cancellations) |
 | 3 | Tools and spokes | ✅ | 2026-11-15 | `e37c178` | 171 pass | 5 MCP servers / 14 tools (JSON envelope, errors returned, strict schemas); 5 AgentDefinitions with least privilege; FX defaults to as-of date; added `revenue_summary`; hub tool-visibility check moved to M4 |
-| 4 | Hub, hooks, permissions, memory | ✅ | 2026-11-15 | `M4:` commit (hash added at M5 start) | 216 pass | check_sdk: launcher=`Agent`; `disallowed_tools` propagates to sub-agents, so rule 1 is enforced by a PreToolUse hook + `can_use_tool` (allowed_tools empty); forced foreground sub-agents; approval tokens; live smoke $0.072 |
-| 5 | Seller UI and API | ⬜ | | | | |
+| 4 | Hub, hooks, permissions, memory | ✅ | 2026-11-15 | `54fee25` | 216 pass | check_sdk: launcher=`Agent`; `disallowed_tools` propagates to sub-agents, so rule 1 is enforced by a PreToolUse hook + `can_use_tool` (allowed_tools empty); forced foreground sub-agents; approval tokens; live smoke $0.072 |
+| 5 | Seller UI and API | ✅ | 2026-11-15 | `M5:` commit (hash added at M6 start) | 228 pass | Chainlit mounted at `/` in FastAPI; UI-agnostic ChatController; approvals via `init_ws_context`; headless websocket e2e PASS (fixed on_chat_start race + approval summary loss); read-only API + bearer token; README rewritten |
 | 6 | Evals | ⬜ | | | | |
 | 7 | Docker and docs | ⬜ | | | | |
 
