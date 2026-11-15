@@ -283,3 +283,32 @@ def test_get_product_unknown(con):
 )  # fmt: skip
 def test_search_products(con, text, codes):
     assert catalog.search_products(con, text)["stock_code"].tolist() == codes
+
+
+# --- Revenue summary ------------------------------------------------------------------------
+
+
+def test_revenue_summary_month_grouping(con, as_of):
+    from scc.analytics.sales import revenue_summary
+
+    df = revenue_summary(
+        con, as_of, start=date(2011, 10, 1), end=date(2011, 11, 30), group_by="month"
+    )
+    assert [str(d) for d in df["period_or_group"]] == ["2011-10-01", "2011-11-01"]
+    assert df["revenue"].tolist() == [10.0, 30.0]
+    assert df["refunds"].tolist() == [0.0, 4.0]
+    assert df["net_revenue"].tolist() == [10.0, 26.0]
+
+
+def test_revenue_summary_end_is_capped_at_as_of(con, as_of):
+    from scc.analytics.sales import revenue_summary
+
+    df = revenue_summary(con, as_of, end=date(2030, 1, 1))
+    assert df["revenue"].tolist() == [100.0]
+
+
+def test_revenue_summary_rejects_unknown_grouping(con, as_of):
+    from scc.analytics.sales import revenue_summary
+
+    with pytest.raises(ValueError):
+        revenue_summary(con, as_of, group_by="product")

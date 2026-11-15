@@ -3,14 +3,14 @@
 This file gives a new chat everything it needs. **The full approved plan is in [docs/PLAN.md](docs/PLAN.md). Read it before doing anything.**
 
 ## Current status
-- The plan was approved on 2026-11-15. Milestones 1 (Scaffold) and 2 (Data layer) done on 2026-11-15. **Next step: Milestone 3 (Tools and spokes).** Progress table: PLAN.md → "Progress tracker".
+- The plan was approved on 2026-11-15. Milestones 1-3 (Scaffold, Data layer, Tools and spokes) done on 2026-11-15. **Next step: Milestone 4 (Hub, hooks, permissions, memory, check_sdk.py).** Progress table: PLAN.md → "Progress tracker".
 - Installed: `claude-agent-sdk` 0.2.182 (bundled CLI confirmed), project `.venv` on Python 3.13 via `uv`. Import package is `scc` (`src/scc/`); settings in `src/scc/config.py` use the `SCC_` env prefix (except `ANTHROPIC_API_KEY`).
 - Update the milestone checklist below as work progresses.
 
 ### Milestone checklist
 - [x] 1. Scaffold: `uv init`, pyproject, config, .gitignore, README skeleton, `git init`
 - [x] 2. Data layer: ingest UCI → DuckDB, views, SQL guard, analytics functions, unit tests
-- [ ] 3. Tools and spokes: MCP servers, 5 AgentDefinitions, Frankfurter FX client
+- [x] 3. Tools and spokes: MCP servers, 5 AgentDefinitions, Frankfurter FX client
 - [ ] 4. Hub, hooks, permissions, memory, `scripts/check_sdk.py`, CLI smoke test
 - [ ] 5. Seller UI (Chainlit) and FastAPI with Chainlit mounted
 - [ ] 6. Evals (`query()` + `output_format`), report
@@ -40,6 +40,8 @@ A **portfolio project** demonstrating production-level use of the **Claude Agent
 - Docker 25 and Node 22 are installed.
 - `claude-agent-sdk` 0.2.180 (latest at the time) **bundles the Claude Code CLI** in `claude_agent_sdk/_bundled/claude`, so the Docker image does not need Node. Use a glibc base image (`python:3.13-slim`), not Alpine.
 - Data facts (verified on the real file): 1,044,848 clean rows after removing the 22,523-row sheet overlap; sales revenue £19,700,954.46 over 1,015,088 lines; 4,725 products; 5,852 customers. Revenue = `sales` view (gross); rankings and forecasts use NET (minus `returns`) because of same-day bulk cancellations (e.g. 23843). Build with `uv run python -m scc.data.ingest` (~1.5 min).
+- M4 must verify (scripts/check_sdk.py): SDK in-process MCP servers are only routed when registered on top-level `ClaudeAgentOptions.mcp_servers`, so the hub sees spoke tools unless removed. Plan: hub `disallowed_tools=[all spoke tool names]`; verify it does NOT also strip them from sub-agents. Also: Task vs Agent tool name; can_use_tool inside sub-agents; SubagentStart/Stop payloads; parent_tool_use_id.
+- Frankfurter (verified live): `api.frankfurter.dev/v1` OK; `.app` returns 301 (follow redirects); weekend → previous business day; unknown currency → 404. FX defaults to the as-of date's rate.
 - DuckDB 2.0 gotchas: lambdas are `lambda x: ...` (not `->`); use `.df(date_as_object=True)` for DATE columns; relations have no `fetchone()` (use `con.execute(...)`); `SUM(BIGINT)` is HUGEINT so cast to BIGINT.
 - Default model IDs: `claude-sonnet-5-5` (hub, sales_analyst), `claude-haiku-5-5` (other spokes). In `AgentDefinition`, `model="haiku"` / `"sonnet"` aliases also work.
 

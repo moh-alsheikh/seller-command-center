@@ -301,9 +301,7 @@ def run(settings: Settings | None = None, *, force: bool = False) -> Path:
         log.info("%s already exists; use --force to rebuild", db_path)
         return db_path
 
-    zip_path = download(
-        settings.uci_url, settings.raw_dir / "online_retail_ii.zip", timeout_s=300
-    )
+    zip_path = download(settings.uci_url, settings.raw_dir / "online_retail_ii.zip", timeout_s=300)
     xlsx_path = extract_workbook(zip_path, settings.raw_dir)
     sheets = read_sheets(xlsx_path)
     raw_rows = sum(len(df) for df in sheets.values())

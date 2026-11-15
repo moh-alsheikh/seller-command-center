@@ -112,8 +112,8 @@ Update this table when a milestone starts or finishes. A commit can't contain it
 | # | Milestone | Status | Finished | Commit | Tests | Notes |
 |---|---|---|---|---|---|---|
 | 1 | Scaffold | ✅ | 2026-11-15 | `90419d6` | 8 pass | SDK 0.2.182 (bundled CLI confirmed); `SCC_` env prefix; package `scc` |
-| 2 | Data layer | ✅ | 2026-11-15 | `M2:` commit (hash added at M3 start) | 113 pass | 1,044,848 rows after removing the 22,523-row sheet overlap; revenue cross-checked against raw data (£19,700,954.46); rankings and forecasts use net values (same-day bulk cancellations) |
-| 3 | Tools and spokes | ⬜ | | | | |
+| 2 | Data layer | ✅ | 2026-11-15 | `40e3d6b` | 113 pass | 1,044,848 rows after removing the 22,523-row sheet overlap; revenue cross-checked against raw data (£19,700,954.46); rankings and forecasts use net values (same-day bulk cancellations) |
+| 3 | Tools and spokes | ✅ | 2026-11-15 | `M3:` commit (hash added at M4 start) | 171 pass | 5 MCP servers / 15 tools (JSON envelope, errors returned, strict schemas); 5 AgentDefinitions with least privilege; FX defaults to as-of date; added `revenue_summary`; hub tool-visibility check moved to M4 |
 | 4 | Hub, hooks, permissions, memory | ⬜ | | | | |
 | 5 | Seller UI and API | ⬜ | | | | |
 | 6 | Evals | ⬜ | | | | |

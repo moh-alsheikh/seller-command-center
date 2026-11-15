@@ -7,7 +7,7 @@ down and delegates to five **specialist sub-agents** that analyse real e-commerc
 then writes an action brief. Anything that changes state (saving a listing draft, creating a
 purchase order) needs your **approval** through Approve/Deny buttons in the UI.
 
-> **Status:** work in progress. Milestones 1-2 of 7 (scaffold, data layer) are done.
+> **Status:** work in progress. Milestones 1-3 of 7 (scaffold, data layer, tools and sub-agents) are done.
 > See [docs/PLAN.md](docs/PLAN.md) for the full plan and [DESIGN.md](DESIGN.md) for the design decisions.
 
 ## Architecture (summary)

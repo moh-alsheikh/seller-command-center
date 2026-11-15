@@ -155,9 +155,15 @@ class MonthForecast:
     trend: float | None
     sold_so_far: float  # units already sold in this month (non-zero for the current month)
 
+    @property
+    def expected_remaining(self) -> float:
+        """Units still expected to sell this month: forecast minus sold so far, at least 0."""
+        return round(max(self.units - self.sold_so_far, 0.0), 1)
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["month"] = self.month.isoformat()
+        d["expected_remaining"] = self.expected_remaining
         return d
 
 
