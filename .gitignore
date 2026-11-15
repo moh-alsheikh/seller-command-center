@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments and secrets
+.venv/
+.env
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Data: downloaded and generated at runtime, never committed (dataset is about 45 MB)
+data/
+
+# Chainlit runtime files
+.files/
+.chainlit/translations/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

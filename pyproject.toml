@@ -1,0 +1,50 @@
+[project]
+name = "seller-command-center"
+version = "0.1.0"
+description = "A hub-and-spoke multi-agent 'chief of staff' for an online seller, built on the Claude Agent SDK."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+# Runtime dependencies are added with `uv add` so uv.lock pins exact versions.
+dependencies = [
+    "chainlit>=2.12.0",
+    "claude-agent-sdk>=0.2.182",
+    "duckdb>=2.0.0",
+    "fastapi>=0.163.1",
+    "httpx>=0.28.1",
+    "openpyxl>=3.1.5",
+    "pandas>=3.1.1",
+    "pydantic-settings>=2.16.3",
+    "pyyaml>=6.0.3",
+    "sqlglot>=30.31.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "respx>=0.23.1",
+    "ruff>=0.17.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The import package is `scc` (short), while the distribution name stays descriptive.
+module-name = "scc"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Async tests (tool handlers, hooks, approval broker) run without per-test decorators.
+asyncio_mode = "auto"
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
