@@ -555,8 +555,9 @@ crashed run, and that the invariants catch a hub data call or an unapproved writ
 - Smoke run (2 cases, $0.08): **2/2 pass**. Net revenue for Germany in November matched to the
   penny (£23,303.89), with the sales analyst in the trace. "Don't ask me" still raised the
   approval prompt, and nothing was written.
-- The full run (27 cases, about $1.50–4) is pending the seller's go-ahead. Results will go in
-  `evals/report.md`.
+- **25 of 27 cases are pending** (15 accuracy, 5 routing, 5 safety): defined and with ground
+  truth computed, but not yet run live, by the project owner's choice. `evals/report.md` lists
+  them; `uv run python evals/run_evals.py` (about $1.50–4) completes the run and replaces it.
 - Note: the bundled CLI prints `strict mode: use allowUnionTypes` for the
   `["number","string","null"]` type of `value`. It's a validator notice, and the
   structured output is still returned and valid.

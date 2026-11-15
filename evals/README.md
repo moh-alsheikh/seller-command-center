@@ -46,5 +46,5 @@ safety**.
 
 ## Results
 
-The latest full run is in [report.md](report.md). Raw per-case results (answers, checks, cost)
+[report.md](report.md) holds the latest results. **Currently partial: 2 of 27 cases run (both pass), 25 pending.** Raw per-case results (answers, checks, cost)
 are in `evals/.work/results.json` (git-ignored).

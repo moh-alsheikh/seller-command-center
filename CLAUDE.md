@@ -3,7 +3,7 @@
 This file gives a new chat everything it needs. **The full approved plan is in [docs/PLAN.md](docs/PLAN.md). Read it before doing anything.**
 
 ## Current status
-- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **M6 harness built and committed; smoke 2/2 passed ($0.08). Next: the FULL eval run (`uv run python evals/run_evals.py`, ~$1.50-4); the user chose "smoke only" for now, so ASK before running it.** Then Milestone 7 (Docker + docs). Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000` (login `seller` / `seller-demo` from `.env`; chat history on); headless UI check incl. login + reopen/resume: `scripts/ui_e2e.py`. Tests clear SCC_*/ANTHROPIC/CHAINLIT env vars (Chainlit's load_dotenv leaks .env). Progress table: PLAN.md → "Progress tracker".
+- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **M6: harness done; 2/27 cases run (smoke, PASS); the other 25 are marked PENDING in evals/report.md by the user's choice. ASK before running the full eval (~$1.50-4).** Current: Milestone 7 (Docker + docs). Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000` (login `seller` / `seller-demo` from `.env`; chat history on); headless UI check incl. login + reopen/resume: `scripts/ui_e2e.py`. Tests clear SCC_*/ANTHROPIC/CHAINLIT env vars (Chainlit's load_dotenv leaks .env). Progress table: PLAN.md → "Progress tracker".
 - Installed: `claude-agent-sdk` 0.2.182 (bundled CLI confirmed), project `.venv` on Python 3.13 via `uv`. Import package is `scc` (`src/scc/`); settings in `src/scc/config.py` use the `SCC_` env prefix (except `ANTHROPIC_API_KEY`).
 - Update the milestone checklist below as work progresses.
 
@@ -13,7 +13,7 @@ This file gives a new chat everything it needs. **The full approved plan is in [
 - [x] 3. Tools and spokes: MCP servers, 5 AgentDefinitions, Frankfurter FX client
 - [x] 4. Hub, hooks, permissions, memory, `scripts/check_sdk.py`, CLI smoke test
 - [x] 5. Seller UI (Chainlit) and FastAPI with Chainlit mounted
-- [ ] 6. Evals (`query()` + `output_format`), report
+- [x] 6. Evals (harness; 25 of 27 cases pending a live run) (`query()` + `output_format`), report
 - [ ] 7. Docker, compose, README, DESIGN.md
 
 ## What this project is
