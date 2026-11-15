@@ -15,8 +15,9 @@ dist/
 .coverage
 htmlcov/
 
-# Data: downloaded and generated at runtime, never committed (dataset is about 45 MB)
-data/
+# Data: downloaded and generated at runtime, never committed (dataset is about 45 MB).
+# Leading slash = only the top-level folder, not the src/scc/data/ package.
+/data/
 
 # Chainlit runtime files
 .files/

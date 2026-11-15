@@ -106,6 +106,19 @@ About 25 cases, run with `query()` + structured output `{answer, value, unit, sp
 6. **Evals:** cases, runner, report.
 7. **Docker and docs:** Dockerfile, compose, README (quick start, demo script, screenshots placeholder), DESIGN.md (architecture, the 6 rules, trade-offs, what I'd do next in production).
 
+### Progress tracker
+Update this table when a milestone starts or finishes. A commit can't contain its own hash, so each row's hash is added when the next milestone starts. Status: ⬜ not started · 🟡 in progress · ✅ done.
+
+| # | Milestone | Status | Finished | Commit | Tests | Notes |
+|---|---|---|---|---|---|---|
+| 1 | Scaffold | ✅ | 2026-11-15 | `90419d6` | 8 pass | SDK 0.2.182 (bundled CLI confirmed); `SCC_` env prefix; package `scc` |
+| 2 | Data layer | ✅ | 2026-11-15 | `M2:` commit (hash added at M3 start) | 113 pass | 1,044,848 rows after removing the 22,523-row sheet overlap; revenue cross-checked against raw data (£19,700,954.46); rankings and forecasts use net values (same-day bulk cancellations) |
+| 3 | Tools and spokes | ⬜ | | | | |
+| 4 | Hub, hooks, permissions, memory | ⬜ | | | | |
+| 5 | Seller UI and API | ⬜ | | | | |
+| 6 | Evals | ⬜ | | | | |
+| 7 | Docker and docs | ⬜ | | | | |
+
 ## Assumptions to verify early (`scripts/check_sdk.py`, milestone 4)
 - The name of the sub-agent launcher tool when `tools=[...]` restricts built-ins (`"Task"` vs `"Agent"`). The script checks which one starts a spoke.
 - Whether `can_use_tool` fires for tool calls made inside sub-agents. The design doesn't depend on it, because all gated actions sit on the hub, but the result is documented.

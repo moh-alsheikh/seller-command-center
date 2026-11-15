@@ -40,7 +40,13 @@ module-name = "scc"
 testpaths = ["tests"]
 # Async tests (tool handlers, hooks, approval broker) run without per-test decorators.
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra"
+filterwarnings = [
+    # Raised inside DuckDB's own .df(date_as_object=True) (it calls DataFrame.drop(inplace=...)).
+    # Not our code; remove this line once DuckDB stops using the deprecated keyword.
+    "ignore:The inplace keyword in DataFrame.drop is deprecated",
+]
 
 [tool.ruff]
 line-length = 100

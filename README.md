@@ -7,7 +7,7 @@ down and delegates to five **specialist sub-agents** that analyse real e-commerc
 then writes an action brief. Anything that changes state (saving a listing draft, creating a
 purchase order) needs your **approval** through Approve/Deny buttons in the UI.
 
-> **Status:** work in progress. Milestone 1 of 7 (scaffold) is done.
+> **Status:** work in progress. Milestones 1-2 of 7 (scaffold, data layer) are done.
 > See [docs/PLAN.md](docs/PLAN.md) for the full plan and [DESIGN.md](DESIGN.md) for the design decisions.
 
 ## Architecture (summary)
@@ -34,9 +34,22 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.13.
 cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env
 uv sync                       # create .venv and install pinned dependencies
 uv run pytest                 # offline unit tests (no API calls)
+uv run python -m scc.data.ingest   # download the dataset once and build data/retail.duckdb
 ```
 
-More commands (data ingest, CLI, UI, evals, Docker) will be added as the milestones land.
+Ingest downloads about 45 MB and takes 1-2 minutes. Expected output:
+
+```
+      transactions: 1044848
+     first_invoice: 2009-12-01 07:45:00
+      last_invoice: 2011-12-09 12:50:00
+       sales_lines: 1015088
+ sales_revenue_gbp: 19700954.46
+          products: 4725
+         customers: 5852
+```
+
+More commands (CLI, UI, evals, Docker) will be added as the milestones land.
 
 ## Project layout
 
