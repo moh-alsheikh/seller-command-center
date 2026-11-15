@@ -106,7 +106,13 @@ class Settings(BaseSettings):
         return self.data_dir / "raw"
 
     @property
+    def chainlit_db_path(self) -> Path:
+        """Chainlit's chat history (threads, messages, steps), used when login is enabled."""
+        return self.data_dir / "chainlit.sqlite"
+
+    @property
     def login_enabled(self) -> bool:
+        """Login on = chat history on: Chainlit only keeps history for logged-in users."""
         return bool(self.app_user and self.app_password)
 
 

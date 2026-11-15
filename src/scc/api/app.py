@@ -127,5 +127,11 @@ def create_app(runtime: HubRuntime | None = None, *, mount_ui: bool = True) -> F
         # Imported here so tests (mount_ui=False) never load Chainlit's server.
         from chainlit.utils import mount_chainlit
 
+        if rt.settings.login_enabled:
+            # mount_chainlit checks for the login secret, so it must exist before mounting.
+            from scc.ui.persistence import ensure_auth_secret
+
+            ensure_auth_secret(rt.settings.data_dir)
+
         mount_chainlit(app=app, target=CHAINLIT_TARGET, path="/")
     return app

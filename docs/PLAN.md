@@ -85,7 +85,7 @@ seller-command-center/
   - Footer on each answer: cost, turns and duration from `ResultMessage`.
   - Optional login: `@cl.password_auth_callback` using `APP_USER`/`APP_PASSWORD` from `.env`.
 - **FastAPI** (`api/app.py`): `GET /health`, `GET /api/memory`, `GET /api/drafts`, `GET /api/purchase-orders`, `GET /api/audit` (read-only JSON for inspection), with Chainlit mounted at `/` through `chainlit.utils.mount_chainlit`. One process, one port (8000).
-- A conversation lasts while the browser tab is open. Persistent chat history in the UI (Chainlit data layer + `resume=`) is listed in DESIGN.md as a "next step for production", to keep version 1 simple.
+- ~~A conversation lasts while the browser tab is open.~~ Changed after the M5 review: chat history is kept (login + Chainlit data layer on SQLite + `on_chat_resume` → `resume=`). See DESIGN.md.
 
 ## Docker
 `python:3.13-slim` image, `uv sync --frozen`, non-root user. The entrypoint runs ingest if `/data/retail.duckdb` is missing (about 45 MB download and 1–2 min to parse, once), then uvicorn. Compose mounts `./data:/data` and reads `ANTHROPIC_API_KEY` from `.env`. Health check on `/health`.
@@ -115,7 +115,7 @@ Update this table when a milestone starts or finishes. A commit can't contain it
 | 2 | Data layer | ✅ | 2026-11-15 | `40e3d6b` | 113 pass | 1,044,848 rows after removing the 22,523-row sheet overlap; revenue cross-checked against raw data (£19,700,954.46); rankings and forecasts use net values (same-day bulk cancellations) |
 | 3 | Tools and spokes | ✅ | 2026-11-15 | `e37c178` | 171 pass | 5 MCP servers / 14 tools (JSON envelope, errors returned, strict schemas); 5 AgentDefinitions with least privilege; FX defaults to as-of date; added `revenue_summary`; hub tool-visibility check moved to M4 |
 | 4 | Hub, hooks, permissions, memory | ✅ | 2026-11-15 | `54fee25` | 216 pass | check_sdk: launcher=`Agent`; `disallowed_tools` propagates to sub-agents, so rule 1 is enforced by a PreToolUse hook + `can_use_tool` (allowed_tools empty); forced foreground sub-agents; approval tokens; live smoke $0.072 |
-| 5 | Seller UI and API | ✅ | 2026-11-15 | `M5:` commit (hash added at M6 start) | 228 pass | Chainlit mounted at `/` in FastAPI; UI-agnostic ChatController; approvals via `init_ws_context`; headless websocket e2e PASS (fixed on_chat_start race + approval summary loss); read-only API + bearer token; README rewritten |
+| 5 | Seller UI and API | ✅ | 2026-11-15 | `b91d799` + history commit (hash added at M6 start) | 233 pass | Chainlit mounted at `/` in FastAPI; UI-agnostic ChatController; approvals via `init_ws_context`; read-only API; README rewritten. **Added after review: chat history** (login + Chainlit SQLAlchemy data layer on SQLite + `on_chat_resume` → SDK `resume=`); e2e PASS incl. reopen + memory |
 | 6 | Evals | ⬜ | | | | |
 | 7 | Docker and docs | ⬜ | | | | |
 

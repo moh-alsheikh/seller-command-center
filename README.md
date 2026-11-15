@@ -148,6 +148,7 @@ Nothing is written until the seller clicks. If they deny, the hub says so and do
 | Permissions | One `can_use_tool` policy for every call, plus `PreToolUse` hooks (hub guard, SQL guard) |
 | Analytics data | DuckDB, read-only, built from UCI Online Retail II |
 | App state | SQLite: chats, costs, preferences, approvals, drafts, purchase orders, audit log |
+| Chat history | Chainlit SQLAlchemy data layer on SQLite (threads, messages, steps), linked to SDK sessions for `resume=` |
 | Live API | Frankfurter (European Central Bank exchange rates, no key) |
 | UI | Chainlit (pure Python), mounted inside FastAPI on one port |
 
@@ -179,7 +180,8 @@ uv run python -m scc.data.ingest
 
 # 4. Start the web UI and API
 uv run uvicorn scc.api.app:create_app --factory --port 8000
-#    open http://localhost:8000
+#    open http://localhost:8000 and log in with the demo account:
+#    user: seller   password: seller-demo   (set in .env; change it before sharing the app)
 ```
 
 Expected output of step 3:
@@ -209,8 +211,11 @@ from the working directory. The `Makefile` has shortcuts for everything: `make i
 
 ## 5. Using the web UI
 
-Open **http://localhost:8000**.
+Open **http://localhost:8000** and log in (demo: `seller` / `seller-demo`, from `.env`).
 
+- **Chat history.** Every chat is saved. Past chats are listed in the sidebar; reopen one
+  and both the messages and the agent's memory of the conversation come back, so you can
+  just continue ("and what about France?"). Reloading the page doesn't lose anything.
 - **Starters.** Four example buttons on the welcome screen (revenue by country, December
   restock, best customers, listing for the top product). Click one to try it.
 - **Ask anything** about sales, customers, stock, prices or listings. Follow-up questions keep
@@ -228,9 +233,11 @@ Open **http://localhost:8000**.
 - **Cost.** Under each answer: number of turns, duration and cost, e.g. *3 turns · 29.0s ·
   $0.0719*.
 
-**Optional login:** set `SCC_APP_USER`, `SCC_APP_PASSWORD` and `CHAINLIT_AUTH_SECRET`
-(generate it with `uv run chainlit create-secret`) in `.env`. The UI then asks for a
-password.
+**Login and history go together.** Chainlit keeps history per user, so it needs a login.
+Both are on when `SCC_APP_USER` and `SCC_APP_PASSWORD` are set (the defaults in
+`.env.example`). Remove both for an anonymous UI without history. The secret that signs login
+cookies is generated on first start (`data/.chainlit_auth_secret`); set
+`CHAINLIT_AUTH_SECRET` yourself only if several servers must share it.
 
 ### Good questions to try
 - *How has net revenue developed by month in 2011 for our top 5 countries?*
@@ -297,7 +304,8 @@ Everything is set through environment variables or `.env`. Defaults are in
 | `SCC_APPROVAL_TIMEOUT_S` | `300` | Seconds before an unanswered approval is denied |
 | `SCC_DATA_DIR` | `./data` | DuckDB, SQLite and the downloaded dataset |
 | `SCC_FX_BASE_URL` | `https://api.frankfurter.dev/v1` | Exchange-rate service (fallback: `api.frankfurter.app`) |
-| `SCC_APP_USER` / `SCC_APP_PASSWORD` | unset | Turn on the UI login (with `CHAINLIT_AUTH_SECRET`) |
+| `SCC_APP_USER` / `SCC_APP_PASSWORD` | `seller` / `seller-demo` in `.env.example` | UI login **and** chat history (remove both to turn off) |
+| `CHAINLIT_AUTH_SECRET` | generated | Signs login cookies; auto-created in `data/` on first start |
 | `SCC_API_TOKEN` | unset | Bearer token for `/api/...` |
 
 ---
@@ -307,7 +315,7 @@ Everything is set through environment variables or `.env`. Defaults are in
 ### Offline unit tests (free, no network)
 
 ```bash
-uv run pytest        # 228 tests, ~10 seconds
+uv run pytest        # 233 tests, ~10 seconds
 make lint            # ruff check + format check
 ```
 
@@ -315,7 +323,9 @@ They need neither an API key nor network access. They cover: data cleaning rules
 business-rule views, the SQL guard (with injection attempts), every analytics function with
 hand-checked numbers, every tool handler including its error messages, the FX client
 (retries, fallback, cache; HTTP mocked), the permission policy table, approval tokens, hooks,
-the hub wiring, the event translator, the UI controller and the API routes.
+the hub wiring, the event translator, the UI controller, the API routes, and Chainlit's real
+data layer running on our chat-history schema. Tests clear the app's environment variables
+first, so your `.env` never changes their outcome.
 
 ### Live checks (use API credit)
 
@@ -323,7 +333,7 @@ the hub wiring, the event translator, the UI controller and the API routes.
 |---|---|---|
 | `uv run python scripts/check_sdk.py` | The SDK behaviours the design relies on (sub-agent tool name, `disallowed_tools` scope, `can_use_tool` inside sub-agents, hook payloads) | ~$0.01 |
 | `uv run scc ask "..."` | The whole agent system from the terminal | ~$0.03-0.10 |
-| `uv run python scripts/ui_e2e.py --url http://127.0.0.1:8000` | Against a running server, over the real websocket: approve one purchase order and deny another, then check that exactly one was written | ~$0.03 |
+| `uv run python scripts/ui_e2e.py --url http://127.0.0.1:8000` | Against a running server, like a browser: log in, approve one purchase order and deny another (check that exactly one was written), then reopen the chat and check that the history is restored **and** the agent still remembers it | ~$0.05 |
 
 ---
 
@@ -358,7 +368,7 @@ src/scc/
   hooks/                 hub guard, SQL guard, audit/tracing, memory injection
   store/app_db.py        SQLite app state
   runtime/               AgentSession (one ClaudeSDKClient per chat), SDK -> UI events
-  ui/                    Chainlit adapter, UI-agnostic chat controller
+  ui/                    Chainlit adapter, UI-agnostic chat controller, chat history (persistence)
   api/app.py             FastAPI: /health, /api/*, Chainlit mounted at /
   cli.py                 `scc` terminal client
 scripts/                 check_sdk.py, ui_e2e.py (live checks)
@@ -383,6 +393,8 @@ DESIGN.md                every design decision, with the reasoning
   reports units already sold so the agent can point this out).
 - **Single instance.** SQLite and in-memory approval futures assume one server process. See
   DESIGN.md for what would change for a multi-instance deployment.
+- **Demo login.** One user, set in `.env`. Fine for a local demo; a real deployment would use
+  OAuth (Chainlit supports it) and per-user data.
 
 ---
 

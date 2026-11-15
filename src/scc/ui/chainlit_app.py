@@ -6,8 +6,12 @@ Run inside FastAPI (one process, one port):  uv run uvicorn scc.api.app:create_a
 Chat lifecycle:
     on_chat_start  build the controller and session (no CLI process yet: connect lazily)
     on_message     connect on the first message, then stream events into the controller
+    on_chat_resume the seller reopened a saved chat from the sidebar: reattach our session,
+                   so the agent continues the same SDK conversation (resume=)
     on_stop        the seller pressed Stop: interrupt the running request
     on_chat_end    close the SDK client (stops the CLI subprocess)
+
+Chat history (login + data layer) is explained in scc/ui/persistence.py.
 
 Approvals: can_use_tool runs in the SDK's own task, not in the Chainlit handler. The view
 therefore re-enters the chat's Chainlit context explicitly (init_ws_context) before showing
@@ -25,6 +29,7 @@ from chainlit.utils import utc_now
 
 from scc.agents.hub import get_runtime
 from scc.runtime.agent_session import AgentSession
+from scc.ui import persistence
 from scc.ui.controller import ChatController
 
 log = logging.getLogger(__name__)
@@ -104,9 +109,10 @@ class ChainlitView:
         return res.get("payload", {}).get("decision") == "approve"
 
 
-# --- optional login --------------------------------------------------------------------------
+# --- login + chat history (both on, or both off) --------------------------------------------
 
 if runtime.settings.login_enabled:
+    persistence.ensure_auth_secret(runtime.settings.data_dir)
 
     @cl.password_auth_callback
     def auth(username: str, password: str) -> cl.User | None:
@@ -114,6 +120,14 @@ if runtime.settings.login_enabled:
         ok_user = hmac.compare_digest(username, s.app_user or "")
         ok_pass = hmac.compare_digest(password, s.app_password.get_secret_value())
         return cl.User(identifier=username) if (ok_user and ok_pass) else None
+
+    @cl.data_layer
+    def data_layer():
+        from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
+
+        db = runtime.settings.chainlit_db_path
+        persistence.ensure_schema(db)
+        return SQLAlchemyDataLayer(conninfo=persistence.conninfo(db))
 
 
 # --- chat handlers ---------------------------------------------------------------------------
@@ -141,12 +155,14 @@ async def starters(user=None, language=None) -> list[cl.Starter]:
     ]
 
 
-def _chat_state() -> tuple[ChatController, AgentSession]:
+def _chat_state(session_id: str | None = None) -> tuple[ChatController, AgentSession]:
     """This chat's controller and session, created on first use.
 
     Normally on_chat_start creates them, but on_chat_start runs as its own task: a client
     that sends a message right after connecting (or reconnects) can reach on_message first.
     The headless UI test (scripts/ui_e2e.py) found this race, so both handlers use this.
+
+    ``session_id``: reattach one of our existing sessions (when a saved chat is reopened).
     """
     controller: ChatController | None = cl.user_session.get("controller")
     session: AgentSession | None = cl.user_session.get("session")
@@ -156,17 +172,36 @@ def _chat_state() -> tuple[ChatController, AgentSession]:
             approval_timeout_s=runtime.settings.approval_timeout_s,
         )
         session = AgentSession(
-            runtime, on_approval=controller.approval_handler, stream_partial=True
+            runtime,
+            session_id=session_id,
+            on_approval=controller.approval_handler,
+            stream_partial=True,
         )
         cl.user_session.set("controller", controller)
         cl.user_session.set("session", session)
         cl.user_session.set("connected", False)
+        # Link this Chainlit thread to our session, so the chat can be resumed later.
+        thread_id = cl.context.session.thread_id
+        if thread_id:
+            runtime.store.link_thread(session.session_id, thread_id)
     return controller, session
 
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
     _chat_state()  # no CLI process yet: it starts with the first message
+
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: dict) -> None:
+    """A saved chat was reopened from the sidebar.
+
+    Chainlit has already restored the messages and steps on screen. We reattach our session
+    for this thread; its SDK session id makes the next question continue the same
+    conversation (resume=), so the agent remembers what was said before.
+    """
+    existing = runtime.store.session_for_thread(thread["id"])
+    _chat_state(session_id=existing["id"] if existing else None)
 
 
 @cl.on_message

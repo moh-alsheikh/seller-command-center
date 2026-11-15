@@ -7,6 +7,7 @@ license = "MIT"
 requires-python = ">=3.13,<3.14"
 # Runtime dependencies are added with `uv add` so uv.lock pins exact versions.
 dependencies = [
+    "aiosqlite>=0.22.1",
     "chainlit>=2.12.0",
     "claude-agent-sdk>=0.2.182",
     "duckdb>=2.0.0",
@@ -16,6 +17,7 @@ dependencies = [
     "pandas>=3.1.1",
     "pydantic-settings>=2.16.3",
     "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.1.8",
     "sqlglot>=30.31.0",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -51,6 +53,8 @@ filterwarnings = [
     "ignore:The inplace keyword in DataFrame.drop is deprecated",
     # Raised by FastAPI's own TestClient import (Starlette wants a newer HTTP client package).
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+    # Raised by traceloop (imported by Chainlit) on Pydantic v2: not our code.
+    "ignore:Support for class-based `config` is deprecated",
 ]
 
 [tool.ruff]

@@ -38,6 +38,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     id              TEXT PRIMARY KEY,
     sdk_session_id  TEXT,
+    chainlit_thread_id TEXT,           -- the web UI thread this chat belongs to, if any
     title           TEXT,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS audit_session ON audit_log(session_id, id);
+CREATE INDEX IF NOT EXISTS sessions_thread ON sessions(chainlit_thread_id);
 CREATE INDEX IF NOT EXISTS requests_session ON requests(session_id, id);
 """
 
@@ -144,7 +146,14 @@ class AppStore:
         self._con.row_factory = sqlite3.Row
         self._con.execute("PRAGMA journal_mode=WAL")  # readers don't block the writer
         self._con.execute("PRAGMA foreign_keys=ON")
+        self._migrate()
         self._con.executescript(SCHEMA)
+
+    def _migrate(self) -> None:
+        """Small, additive migrations for databases created by earlier versions."""
+        cols = {r[1] for r in self._con.execute("PRAGMA table_info(sessions)").fetchall()}
+        if cols and "chainlit_thread_id" not in cols:  # added in milestone 5
+            self._con.execute("ALTER TABLE sessions ADD COLUMN chainlit_thread_id TEXT")
 
     def close(self) -> None:
         self._con.close()
@@ -187,6 +196,19 @@ class AppStore:
         """Look up by our id or by the SDK's session id (both are accepted by --resume)."""
         return self._one(
             "SELECT * FROM sessions WHERE id = ? OR sdk_session_id = ?", (any_id, any_id)
+        )
+
+    def link_thread(self, session_id: str, thread_id: str) -> None:
+        """Remember which web UI thread a session belongs to (for resuming it later)."""
+        with self._tx() as c:
+            c.execute(
+                "UPDATE sessions SET chainlit_thread_id = ? WHERE id = ?", (thread_id, session_id)
+            )
+
+    def session_for_thread(self, thread_id: str) -> dict[str, Any] | None:
+        return self._one(
+            "SELECT * FROM sessions WHERE chainlit_thread_id = ? ORDER BY updated_at DESC LIMIT 1",
+            (thread_id,),
         )
 
     def list_sessions(self, limit: int = 20) -> list[dict[str, Any]]:

@@ -450,5 +450,49 @@ The script also found two real issues, now fixed:
 ### What would change for production at scale
 - Approval futures live in process memory, so a multi-instance deployment would need sticky
   sessions or a shared store (Redis pub/sub or Postgres `LISTEN/NOTIFY`) for `resolve()`.
-- SQLite becomes Postgres. Chat history would persist through Chainlit's data layer plus SDK
-  `resume=`, so a reloaded tab shows earlier chats.
+- SQLite becomes Postgres (for app state and chat history alike).
+
+### Chat history (added after M5 review)
+Testing in the browser showed the weakness: **a page reload lost the chat.** Everything was
+saved in our database and in the SDK's session files, but nothing brought it back into the
+UI. For a portfolio app that a reviewer reloads, that looks broken, so it was fixed before
+milestone 6.
+
+**Three stores, each with one job:**
+
+| Store | Owner | Holds | Used for |
+|---|---|---|---|
+| `data/chainlit.sqlite` | Chainlit data layer | threads, messages, steps | what the UI shows; the sidebar |
+| `data/app.sqlite` | us (`AppStore`) | sessions, costs, approvals, audit, **`chainlit_thread_id`** | our records; linking thread to session |
+| SDK session files | Claude Code CLI | the model's conversation | `resume=`, so the agent *remembers* |
+
+When a saved chat is reopened, Chainlit restores the screen and calls `on_chat_resume(thread)`.
+We look up our session by `chainlit_thread_id` and create the `AgentSession` with it, so the
+next question reconnects with `resume=<sdk_session_id>`. Seeing the old messages and the
+agent remembering them are separate problems, and this link solves both.
+
+**Decisions:**
+- **Login and history are one switch.** Chainlit keeps history per user, so history needs a
+  login. `.env.example` ships a clearly marked demo account (`seller` / `seller-demo`), so the
+  default experience includes history.
+- **The login secret is generated automatically.** Chainlit refuses to start with a login but
+  without `CHAINLIT_AUTH_SECRET`. Instead of a manual `chainlit create-secret` step, the
+  app creates a random secret once and keeps it in `data/.chainlit_auth_secret` (mode 600,
+  git-ignored), so logins survive restarts. An explicit environment variable still wins.
+- **SQLite with our own schema.** Chainlit 2.12's SQLAlchemy layer doesn't create tables.
+  The schema in `ui/persistence.py` was derived from what that layer writes: every non-empty
+  `StepDict` key for steps, plus the explicit columns for threads, users, elements and
+  feedback. A check of its source found no Postgres-only SQL. A test runs **Chainlit's real
+  data layer** against this schema (user, thread, nested steps, upsert, list, delete).
+- **Additive migration.** Databases created before this change get the new
+  `sessions.chainlit_thread_id` column on start (`ALTER TABLE ... ADD COLUMN`); a test covers
+  an old-format file.
+
+**Verified live** with `scripts/ui_e2e.py`, which now also logs in, then reopens the chat as a
+fresh connection: all 14 steps were restored, and asked "how many units were in the PO I
+approved?", the agent answered **12**, which it could only know from the resumed SDK session.
+
+**A testing fix found on the way:** importing Chainlit runs `load_dotenv()`, which copied the
+developer's `.env` (API key, login) into the test process and broke two config tests. An
+autouse fixture now removes the app's variables before every test, so the suite gives the
+same result on any machine.

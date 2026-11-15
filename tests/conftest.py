@@ -47,6 +47,21 @@ def raw_frame(rows=RAW_ROWS) -> pd.DataFrame:
     return df.astype({"Invoice": str, "StockCode": str, "Customer ID": "float64"})
 
 
+@pytest.fixture(autouse=True)
+def hermetic_env(monkeypatch):
+    """Keep the developer's .env out of every test.
+
+    Importing chainlit runs load_dotenv(), which copies .env (API key, login, tokens) into
+    os.environ for the whole test process. Tests must behave the same on any machine, so
+    the app's variables are removed before each test; tests that need one set it themselves.
+    """
+    import os
+
+    for name in list(os.environ):
+        if name.startswith("SCC_") or name in ("ANTHROPIC_API_KEY", "CHAINLIT_AUTH_SECRET"):
+            monkeypatch.delenv(name)
+
+
 @pytest.fixture(scope="session")
 def retail_db(tmp_path_factory) -> Path:
     """Path to a built test database (read it with connect_readonly)."""
