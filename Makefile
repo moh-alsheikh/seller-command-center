@@ -1,7 +1,6 @@
 # Short aliases for common commands. Each target is a plain `uv run ...` you can also type by hand.
-# More targets (evals, docker) are added as the milestones land.
 
-.PHONY: install test lint fmt ingest check-sdk chat serve ui ui-e2e
+.PHONY: install test lint fmt ingest check-sdk chat serve ui ui-e2e evals evals-dry docker-up docker-down docker-logs
 
 install:  ## Create .venv and install the pinned dependencies from uv.lock
 	uv sync
@@ -34,3 +33,18 @@ ui:       ## Chainlit UI alone with auto-reload, for UI development (port 8000)
 
 ui-e2e:   ## Headless end-to-end UI check against a running `make serve` (live, about $0.03)
 	uv run python scripts/ui_e2e.py --url http://127.0.0.1:8000
+
+evals-dry: ## Compute eval ground truth only (free)
+	uv run python evals/run_evals.py --dry-run
+
+evals:    ## Full eval suite -> evals/report.md (live, about $1.50-4)
+	uv run python evals/run_evals.py
+
+docker-up:   ## Build and start the container on http://localhost:8000 (reuses ./data)
+	docker compose up -d --build
+
+docker-down: ## Stop the container (data in ./data is kept)
+	docker compose down
+
+docker-logs: ## Follow the container logs
+	docker compose logs -f app

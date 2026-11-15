@@ -1,0 +1,35 @@
+# Local deployment: `docker compose up --build`, then open http://localhost:8000
+#
+# - Reads ANTHROPIC_API_KEY (and optional SCC_* settings, login) from .env.
+# - ./data on the host is the container's /data: the database is built there on first start
+#   (or reused if you already ran ingest locally), and chats, approvals, purchase orders and
+#   the CLI's session files survive restarts and rebuilds.
+# - Published on 127.0.0.1 only. Put a TLS reverse proxy in front before exposing it.
+services:
+  app:
+    build:
+      context: .
+      args:
+        APP_UID: "${APP_UID:-1000}"
+    image: seller-command-center:latest
+    env_file: .env
+    environment:
+      SCC_DATA_DIR: /data
+      CLAUDE_CONFIG_DIR: /data/claude
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/data
+    # Temp files in memory: the Claude CLI needs a writable /tmp, and keeping it off the
+    # container's disk means a full Docker disk (seen during testing) can't stop requests.
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    restart: unless-stopped
+    # Each request runs a Claude Code subprocess plus sub-agents; leave headroom.
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 3

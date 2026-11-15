@@ -561,3 +561,91 @@ crashed run, and that the invariants catch a hub data call or an unapproved writ
 - Note: the bundled CLI prints `strict mode: use allowUnionTypes` for the
   `["number","string","null"]` type of `value`. It's a validator notice, and the
   structured output is still returned and valid.
+
+---
+
+## Milestone 7: Docker
+
+### Image (`Dockerfile`)
+- **`python:3.13-slim`, not Alpine.** The Claude Code CLI bundled inside `claude-agent-sdk` is
+  a glibc binary (musl-based Alpine can't run it). Because the SDK bundles the CLI, the image
+  has **no Node.js**.
+- **Reproducible:** `uv sync --frozen --no-dev` installs exactly what `uv.lock` pins, and `uv`
+  itself is pinned (`ghcr.io/astral-sh/uv:0.11.16`). Dependencies get their own layer
+  (copy `pyproject.toml` + `uv.lock` first), so code changes rebuild in seconds.
+- **Non-root:** runs as user `app`. Its uid is a build arg (`APP_UID`), so on Linux the files
+  written to the bind-mounted `./data` belong to the host user.
+- **Small build context:** `.dockerignore` keeps out `.env`, `.git`, `data/`, tests, evals and
+  docs, so secrets can never be baked into an image layer.
+- **Health check** with Python's standard library (the slim image has no `curl`) against
+  `/health`, which returns 503 until the database is there. The 180 s start period covers a
+  first-start ingest.
+
+### Start (`docker/entrypoint.sh`)
+Build the database if `/data/retail.duckdb` is missing (the atomic build from milestone 2
+means a crash mid-ingest leaves no half-built file), warn if no API key is set, then `exec`
+uvicorn. With `exec`, uvicorn replaces the shell as PID 1, so `docker stop` shuts it down
+cleanly.
+
+### State: everything in one volume
+`./data` on the host is `/data` in the container:
+
+| Path | What |
+|---|---|
+| `retail.duckdb` | analytics data (read-only at runtime) |
+| `app.sqlite` | sessions, costs, approvals, purchase orders, drafts, audit |
+| `chainlit.sqlite` | chat history (threads, messages, steps) |
+| `.chainlit_auth_secret` | login cookie signing key (mode 600) |
+| `claude/` | **the CLI's session files**, via `CLAUDE_CONFIG_DIR=/data/claude` |
+
+The last row matters: `resume=` reads the CLI's own conversation files. In the CLI's default
+location (`~/.claude` inside the container), a reopened chat would show its history after a
+restart, but the agent would have forgotten it. Verified: a live call in the container wrote
+`/data/claude/projects/-app/<session>.jsonl`, and after `docker compose restart` the health
+check passed and all previous chats were still there.
+
+### Found while testing: a full Docker disk
+The first live check inside the container failed with "the volume holding /tmp is full
+(ENOSPC)". Docker Desktop's virtual disk was at 100% (43/44 GB, mostly other projects' images).
+Nothing of the owner's was deleted. The compose file now mounts `/tmp` as an in-memory
+`tmpfs` (512 MB), so the CLI's temp files can't fail on a full container disk. The README
+troubleshooting table explains how to free Docker space. After the change, the CLI in the
+container answered (`OK`, $0.00004) using the API key.
+
+### Compose (`docker-compose.yml`)
+`env_file: .env` for the key and settings; the port is published on **127.0.0.1 only** (a TLS
+reverse proxy belongs in front before anyone else can reach it); `restart: unless-stopped`;
+`mem_limit: 2g`, because each request runs a CLI subprocess plus sub-agents.
+
+---
+
+## Summary: trade-offs, and what I'd do next in production
+
+### Trade-offs taken knowingly (version 1)
+| Choice | Why it's fine here | What it costs |
+|---|---|---|
+| SQLite for app state and chat history | one file, no extra service, fine for one instance | no multi-instance writes |
+| Approval futures in process memory | simple, testable, a fail-closed timeout | approvals need sticky sessions with more than one instance |
+| Fixed "today" (2011-12-09) | reproducible answers and evals | not a live shop |
+| Seasonal-naive × trend forecast | explainable, strong baseline for 2 seasonal years | misses sudden breakouts (reported via `sold_so_far`) |
+| Single demo login | history needs a user; zero setup | not real user management |
+| Hub sees spoke tool *schemas* | `disallowed_tools` would break the spokes (verified) | a few hundred extra tokens per request; rule 1 is still enforced twice |
+| Evals: 2 of 27 run so far | harness, references and invariants are tested offline | the full pass rate is not measured yet |
+
+### Next steps for production
+1. **Run the full eval suite in CI** on every prompt or tool change, with a stored baseline
+   and alerts on regressions. Add LLM-graded checks for answer quality, plus more injection
+   cases (in SQL results, in customer data).
+2. **Postgres** for app state and Chainlit's data layer (the data layer only issues portable
+   SQL); **Redis or Postgres `LISTEN/NOTIFY`** for approvals across instances.
+3. **Real identity:** OAuth (Chainlit supports it), per-user preferences and audit, and
+   role-based approval (who may approve a purchase order above £X).
+4. **Real integrations behind the same gate:** send approved purchase orders and listings to a
+   supplier or shop API. That would be a new write tool with the same token-checked approval;
+   nothing else in the design changes.
+5. **Observability:** export the audit log and costs to OpenTelemetry; set per-user daily
+   budgets on top of the per-request `max_budget_usd`.
+6. **Prompt caching and model routing:** cache the hub and spoke system prompts and tool
+   schemas; try Haiku for the hub on simple routing questions, measured with the evals.
+7. **Live data:** replace the fixed date and the UCI file with an incremental feed. The views
+   and analytics stay the same.

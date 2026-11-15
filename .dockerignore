@@ -1,0 +1,21 @@
+# Keep the build context small and secret-free: only what the Dockerfile copies is needed.
+.git
+.gitignore
+.venv
+.env
+.env.*
+!.env.example
+data/
+evals/
+tests/
+docs/
+scripts/
+.files/
+.chainlit/translations/
+**/__pycache__
+.pytest_cache
+.ruff_cache
+*.pyc
+.DS_Store
+.vscode
+.idea

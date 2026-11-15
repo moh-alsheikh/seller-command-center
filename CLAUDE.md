@@ -3,7 +3,7 @@
 This file gives a new chat everything it needs. **The full approved plan is in [docs/PLAN.md](docs/PLAN.md). Read it before doing anything.**
 
 ## Current status
-- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **M6: harness done; 2/27 cases run (smoke, PASS); the other 25 are marked PENDING in evals/report.md by the user's choice. ASK before running the full eval (~$1.50-4).** Current: Milestone 7 (Docker + docs). Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000` (login `seller` / `seller-demo` from `.env`; chat history on); headless UI check incl. login + reopen/resume: `scripts/ui_e2e.py`. Tests clear SCC_*/ANTHROPIC/CHAINLIT env vars (Chainlit's load_dotenv leaks .env). Progress table: PLAN.md → "Progress tracker".
+- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **M6: harness done; 2/27 cases run (smoke, PASS); the other 25 are marked PENDING in evals/report.md by the user's choice. ASK before running the full eval (~$1.50-4).** M7 (Docker + docs) done 2026-11-15: `docker compose up -d --build`; all state in ./data (CLAUDE_CONFIG_DIR=/data/claude). Docker Desktop's disk was 100% full during testing; /tmp is tmpfs in compose. **All milestones built; remaining: the full eval run (ask first).** Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000` (login `seller` / `seller-demo` from `.env`; chat history on); headless UI check incl. login + reopen/resume: `scripts/ui_e2e.py`. Tests clear SCC_*/ANTHROPIC/CHAINLIT env vars (Chainlit's load_dotenv leaks .env). Progress table: PLAN.md → "Progress tracker".
 - Installed: `claude-agent-sdk` 0.2.182 (bundled CLI confirmed), project `.venv` on Python 3.13 via `uv`. Import package is `scc` (`src/scc/`); settings in `src/scc/config.py` use the `SCC_` env prefix (except `ANTHROPIC_API_KEY`).
 - Update the milestone checklist below as work progresses.
 
@@ -14,7 +14,7 @@ This file gives a new chat everything it needs. **The full approved plan is in [
 - [x] 4. Hub, hooks, permissions, memory, `scripts/check_sdk.py`, CLI smoke test
 - [x] 5. Seller UI (Chainlit) and FastAPI with Chainlit mounted
 - [x] 6. Evals (harness; 25 of 27 cases pending a live run) (`query()` + `output_format`), report
-- [ ] 7. Docker, compose, README, DESIGN.md
+- [x] 7. Docker, compose, README, DESIGN.md
 
 ## What this project is
 A **portfolio project** demonstrating production-level use of the **Claude Agent SDK (Python)** for job applications. The user is studying for the **CCAR-F (Claude Certified Architect – Foundations)** certification and has just finished an Agent SDK workshop.

@@ -10,8 +10,9 @@ The hub combines their findings into a short brief with recommended next steps. 
 changes something, such as a draft purchase order or a product listing, happens **only after
 the seller clicks Approve**.
 
-> **Status:** milestones 1-5 of 7 are done and the eval suite (6) is built. The system works
-> end to end in the web UI and the terminal. Still to come: the full eval run and Docker packaging (7).
+> **Status:** all 7 milestones are built. It runs locally or in Docker. Evals: the harness and 27
+> cases are done; 2 have been run live (both pass) and **25 are pending** a full run
+> ([evals/report.md](evals/report.md)).
 > Design decisions: [DESIGN.md](DESIGN.md) · Build plan and progress: [docs/PLAN.md](docs/PLAN.md)
 
 ---
@@ -28,8 +29,9 @@ the seller clicks Approve**.
 9. [Testing and verification](#9-testing-and-verification)
 10. [Costs](#10-costs)
 11. [Project layout](#11-project-layout)
-12. [Limitations](#12-limitations)
-13. [Data and licences](#13-data-and-licences)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Limitations](#13-limitations)
+14. [Data and licences](#14-data-and-licences)
 
 ---
 
@@ -165,7 +167,23 @@ milestone by milestone in [DESIGN.md](DESIGN.md).
   with the SDK, so Node isn't needed.
 - About 200 MB of disk space for the dataset and database
 
-### Steps
+### Option A: Docker (simplest)
+
+Requires Docker (Desktop) and an Anthropic API key.
+
+```bash
+cp .env.example .env              # then put your ANTHROPIC_API_KEY in .env
+docker compose up -d --build      # first build ~5-15 min; first start builds the database (1-2 min)
+#   open http://localhost:8000 and log in: seller / seller-demo
+docker compose logs -f app        # follow the logs
+docker compose down               # stop (everything in ./data is kept)
+```
+
+Everything the app stores lives in `./data` on your machine: the database, chats, approvals,
+purchase orders and the agent's conversation files. It survives restarts and rebuilds. The
+port is published on `127.0.0.1` only. `make docker-up` / `make docker-down` do the same.
+
+### Option B: local Python
 
 ```bash
 # 1. Install (creates .venv with the exact versions from uv.lock)
@@ -204,7 +222,8 @@ curl http://localhost:8000/health
 ```
 
 Run commands from the project root: Chainlit reads `.chainlit/config.toml` and `chainlit.md`
-from the working directory. The `Makefile` has shortcuts for everything: `make install`,
+from the working directory. Docker and local runs can share `./data`, but don't run both at
+once (they use the same port and files). The `Makefile` has shortcuts for everything: `make install`,
 `make ingest`, `make serve`, `make test`, `make chat`.
 
 ---
@@ -307,6 +326,7 @@ Everything is set through environment variables or `.env`. Defaults are in
 | `SCC_APP_USER` / `SCC_APP_PASSWORD` | `seller` / `seller-demo` in `.env.example` | UI login **and** chat history (remove both to turn off) |
 | `CHAINLIT_AUTH_SECRET` | generated | Signs login cookies; auto-created in `data/` on first start |
 | `SCC_API_TOKEN` | unset | Bearer token for `/api/...` |
+| `APP_UID` (Docker build arg) | `1000` | Container user id; on Linux set it to `$(id -u)` so files in `./data` stay yours |
 
 ---
 
@@ -378,11 +398,24 @@ evals/                   cases.yaml, run_evals.py, report.md (see evals/README.m
 tests/                   offline pytest suite
 docs/PLAN.md             build plan + progress tracker
 DESIGN.md                every design decision, with the reasoning
+Dockerfile, docker-compose.yml, docker/entrypoint.sh   container build and start
 ```
 
 ---
 
-## 12. Limitations
+## 12. Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Container log says `/tmp ... is full (ENOSPC)`, or builds fail with "no space left" | Docker Desktop's virtual disk is full (it happened during testing). Free space with `docker builder prune` and `docker image prune`, or raise the disk limit in Docker Desktop settings. The compose file already keeps `/tmp` in memory. |
+| `address already in use` on port 8000 | A local `uvicorn` (or another app) is using it. Stop it, or change the port mapping in `docker-compose.yml`. |
+| Login fails | User and password come from `SCC_APP_USER` / `SCC_APP_PASSWORD` in `.env` (demo: `seller` / `seller-demo`). Restart after changing them. |
+| `/health` returns 503 | `retail_db: false` means the database hasn't been built: run `uv run python -m scc.data.ingest` (Docker does this on first start). |
+| Questions fail straight away | `ANTHROPIC_API_KEY` is missing or the API balance is used up. Check the server log. |
+
+---
+
+## 13. Limitations
 
 - **Historical data.** The dataset ends on 2011-12-09, and the app treats that day as
   "today". Exchange rates also default to that date (live "latest" rates are available on
@@ -401,7 +434,7 @@ DESIGN.md                every design decision, with the reasoning
 
 ---
 
-## 13. Data and licences
+## 14. Data and licences
 
 - **Data:** [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii)
   by Daqing Chen, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It's downloaded
