@@ -78,7 +78,8 @@ class ChainlitView:
     async def footer(self, text: str) -> None:
         await self.end_text()
         if self.last_message is not None:
-            self.last_message.content += f"\n\n<sub>{text}</sub>"
+            # Markdown, not HTML: unsafe_allow_html stays off, so tags would show as text.
+            self.last_message.content += f"\n\n*{text}*"
             await self.last_message.update()
 
     async def notice(self, text: str) -> None:
