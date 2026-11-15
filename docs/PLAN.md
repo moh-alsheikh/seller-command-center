@@ -115,8 +115,8 @@ Update this table when a milestone starts or finishes. A commit can't contain it
 | 2 | Data layer | ✅ | 2026-11-15 | `40e3d6b` | 113 pass | 1,044,848 rows after removing the 22,523-row sheet overlap; revenue cross-checked against raw data (£19,700,954.46); rankings and forecasts use net values (same-day bulk cancellations) |
 | 3 | Tools and spokes | ✅ | 2026-11-15 | `e37c178` | 171 pass | 5 MCP servers / 14 tools (JSON envelope, errors returned, strict schemas); 5 AgentDefinitions with least privilege; FX defaults to as-of date; added `revenue_summary`; hub tool-visibility check moved to M4 |
 | 4 | Hub, hooks, permissions, memory | ✅ | 2026-11-15 | `54fee25` | 216 pass | check_sdk: launcher=`Agent`; `disallowed_tools` propagates to sub-agents, so rule 1 is enforced by a PreToolUse hook + `can_use_tool` (allowed_tools empty); forced foreground sub-agents; approval tokens; live smoke $0.072 |
-| 5 | Seller UI and API | ✅ | 2026-11-15 | `b91d799` + history commit (hash added at M6 start) | 233 pass | Chainlit mounted at `/` in FastAPI; UI-agnostic ChatController; approvals via `init_ws_context`; read-only API; README rewritten. **Added after review: chat history** (login + Chainlit SQLAlchemy data layer on SQLite + `on_chat_resume` → SDK `resume=`); e2e PASS incl. reopen + memory |
-| 6 | Evals | ⬜ | | | | |
+| 5 | Seller UI and API | ✅ | 2026-11-15 | `b91d799`, `0242796`, `d29a7a2` | 233 pass | Chainlit mounted at `/` in FastAPI; UI-agnostic ChatController; approvals via `init_ws_context`; read-only API; README rewritten. **Added after review: chat history** (login + Chainlit SQLAlchemy data layer on SQLite + `on_chat_resume` → SDK `resume=`); e2e PASS incl. reopen + memory |
+| 6 | Evals | 🟡 | | `M6:` harness commit | 257 pass | Harness done: 27 cases (16 accuracy / 5 routing / 6 safety), references computed live (dry run free), graded on evidence + invariants on every case, isolated workspace with planted injection. Smoke 2/2 pass ($0.08). **Full run pending the user's go-ahead** (~$1.50-4) |
 | 7 | Docker and docs | ⬜ | | | | |
 
 ## Assumptions to verify early (`scripts/check_sdk.py`, milestone 4)

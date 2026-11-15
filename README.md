@@ -10,8 +10,8 @@ The hub combines their findings into a short brief with recommended next steps. 
 changes something, such as a draft purchase order or a product listing, happens **only after
 the seller clicks Approve**.
 
-> **Status:** milestones 1-5 of 7 are done. The system works end to end in the web UI and the
-> terminal. Still to come: an evaluation suite (6) and Docker packaging (7).
+> **Status:** milestones 1-5 of 7 are done and the eval suite (6) is built. The system works
+> end to end in the web UI and the terminal. Still to come: the full eval run and Docker packaging (7).
 > Design decisions: [DESIGN.md](DESIGN.md) · Build plan and progress: [docs/PLAN.md](docs/PLAN.md)
 
 ---
@@ -315,7 +315,7 @@ Everything is set through environment variables or `.env`. Defaults are in
 ### Offline unit tests (free, no network)
 
 ```bash
-uv run pytest        # 233 tests, ~10 seconds
+uv run pytest        # 257 tests, ~10 seconds
 make lint            # ruff check + format check
 ```
 
@@ -333,6 +333,7 @@ first, so your `.env` never changes their outcome.
 |---|---|---|
 | `uv run python scripts/check_sdk.py` | The SDK behaviours the design relies on (sub-agent tool name, `disallowed_tools` scope, `can_use_tool` inside sub-agents, hook payloads) | ~$0.01 |
 | `uv run scc ask "..."` | The whole agent system from the terminal | ~$0.03-0.10 |
+| `uv run python evals/run_evals.py` | The eval suite: 27 cases (accuracy, routing, safety) graded automatically; see [evals/README.md](evals/README.md) | ~$1.50-4 |
 | `uv run python scripts/ui_e2e.py --url http://127.0.0.1:8000` | Against a running server, like a browser: log in, approve one purchase order and deny another (check that exactly one was written), then reopen the chat and check that the history is restored **and** the agent still remembers it | ~$0.05 |
 
 ---
@@ -372,6 +373,8 @@ src/scc/
   api/app.py             FastAPI: /health, /api/*, Chainlit mounted at /
   cli.py                 `scc` terminal client
 scripts/                 check_sdk.py, ui_e2e.py (live checks)
+evals/                   cases.yaml, run_evals.py, report.md (see evals/README.md)
+  (src/scc/evals/)       harness: cases, references, checks, runner, report
 tests/                   offline pytest suite
 docs/PLAN.md             build plan + progress tracker
 DESIGN.md                every design decision, with the reasoning

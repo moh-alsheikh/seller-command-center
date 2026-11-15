@@ -27,3 +27,6 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Eval workspace: copied database, eval app DB, raw results (report.md is committed)
+evals/.work/
