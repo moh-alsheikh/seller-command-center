@@ -271,3 +271,109 @@ return the previous business day; unknown currencies return **404**.
 - **Validation before any URL is built:** currency codes must match `^[A-Z]{3}$`, so input like
   `../latest` can't change the request path.
 - Tests inject a fake clock and mock all HTTP with `respx`, so there are no network calls.
+
+---
+
+## Milestone 4: hub, hooks, permissions, memory
+
+### Verify the SDK first (`scripts/check_sdk.py`)
+Some design choices depend on SDK behaviour that is easy to misremember. A probe script settles
+each question with a real run, using Haiku and a one-tool probe agent; it costs about $0.002.
+Results (CLI 2.1.325, SDK 0.2.182, 2026-11-15):
+
+| Question | Finding | Consequence |
+|---|---|---|
+| Launcher name with `tools=[...]` | Both `["Agent"]` and `["Task"]` work. The init message lists **Task**; tool-use blocks and hooks report **Agent** (inputs: `subagent_type`, `description`, `prompt`, `run_in_background`). | `tools=["Agent"]`; code accepts both names. |
+| `disallowed_tools` on the hub | **It also removes the tool from sub-agents.** The probe agent failed with "tools list resolved to nothing". | It can't be used to hide data tools from the hub. Rule 1 is enforced by a hook and the policy instead. |
+| PreToolUse hook as a guard | Hook input has `agent_id` and `agent_type` only for sub-agent calls. Denying "data tool + no agent_id" blocked the hub and **not** the spoke. | `hooks/guards.py: hub_guard`. |
+| `can_use_tool` scope | Fires for the hub's tools (`agent_id=None`) **and** for sub-agent tools (`agent_id` set). | One policy function covers both. |
+| Tracing | `SubagentStart`/`SubagentStop` carry `agent_type` and `agent_id`; sub-agent messages carry `parent_tool_use_id`. | Audit and UI nesting work without guessing. |
+
+**Then the live smoke test found one more:** the hub set `run_in_background: true` on its
+`Agent` calls, and ended its turn with "both specialists are still running" before any report
+arrived. The fix has three layers: the policy rewrites the input to `run_in_background: false`
+(the guarantee), each spoke has `AgentDefinition(background=False)`, and the hub prompt says to
+wait.
+
+### One permission policy for every call (`src/scc/permissions.py`)
+`allowed_tools=[]` on purpose. Anything listed there is auto-approved and **never reaches**
+`can_use_tool`; the SDK warns about this as `CanUseToolShadowedWarning`. With it empty, every
+call (hub or spoke) goes through `ToolPolicy`, which is the whole permission model in one
+small, table-tested function:
+
+| Tool | Hub | Spoke |
+|---|---|---|
+| `Agent` | allow (forced foreground) | deny (no nested delegation) |
+| read-only data tools | **deny**: "delegate" (rule 1) | allow |
+| memory tools | allow | deny |
+| `save_listing_draft`, `create_purchase_order` | **ask the seller** | deny (rule 2) |
+| anything else | deny | deny |
+
+Rule 1 is therefore enforced twice: by the `PreToolUse` hub guard, and by the policy. The
+hub's prompt also says it has no data tools, but nothing depends on the model obeying that.
+
+### Human approval with tokens
+`ApprovalBroker` connects the waiting `can_use_tool` call to whichever UI answers:
+1. It creates an `approvals` row and an `asyncio.Future`, then calls the UI's
+   `on_request(req)`. That callback must return quickly: show the buttons, or a terminal prompt.
+2. The UI later calls `broker.resolve(id, approved=...)`. With no answer within
+   `SCC_APPROVAL_TIMEOUT_S`, the request is **denied**. With no UI at all, it is denied
+   immediately (fail closed).
+3. On approval, the policy returns `PermissionResultAllow(updated_input={..., "approval_id": id})`.
+
+The write tools then check that token themselves (`AppStore.consume_approval`, in one
+transaction): it must be approved, unused, for the same tool, and for **the same input
+(SHA-256 of the canonical JSON)**. That means:
+- even if someone added the write tools to `allowed_tools`, nothing would be written without a
+  recorded human decision,
+- an approval can't be used twice, and an input changed after approval is rejected,
+- every purchase order and listing draft row points to the approval that allowed it.
+
+Tested live: the SDK's schema validation accepts the injected `approval_id` (it's declared in
+the schema as "filled in by the system"), and the whole flow wrote a draft PO linked to its
+approval.
+
+Evals will use `auto_policy(False, "eval")`, which denies every request. The CLI asks y/N in
+the terminal and denies if no terminal is attached.
+
+### Hooks (`src/scc/hooks/`)
+| Event | Hook | Purpose |
+|---|---|---|
+| PreToolUse (all) | `hub_guard` | Rule 1: deny data tools called by the hub. |
+| PreToolUse (`run_sql`) | `sql_guard` | Rule 5, layer 2: one read-only SELECT, allow-listed tables. |
+| PreToolUse / PostToolUse / PostToolUseFailure | `AuditHooks` | One `audit_log` row per call, with agent, duration and a result preview. |
+| SubagentStart / SubagentStop | `AuditHooks` | Which spoke ran, for tracing. |
+| UserPromptSubmit | `memory_inject` | Adds `<seller_preferences>` to every prompt, read fresh from SQLite. |
+
+Auditing never breaks a conversation: failures to write a record are logged and swallowed.
+
+### Memory
+`remember_preference` and `forget_preference` are hub tools without approval: they change
+nothing outside the app and can be undone. Preferences are injected on every turn by the hook
+rather than kept in the conversation, so they apply across chats and survive context
+compaction. They're capped (50) and de-duplicated.
+
+### `build_options` (`src/scc/agents/hub.py`)
+Besides the tool settings above:
+- `setting_sources=[]` and `strict_mcp_config=True` (**isolation**): the app must behave the
+  same on any machine, so it ignores `~/.claude/settings.json`, project settings and `.mcp.json`
+  files. Without this, a developer's personal allow rules or MCP servers would leak into the app.
+- `env={"ANTHROPIC_API_KEY": ...}`: pydantic-settings reads `.env` into `Settings` but doesn't
+  export it, and the CLI subprocess only sees `os.environ` plus `options.env`.
+- `max_turns` and `max_budget_usd` on every request.
+
+### Runtime (`src/scc/runtime/`)
+- `AgentSession` wraps one `ClaudeSDKClient` per chat (multi-turn, interrupt, streaming mode
+  for approvals). It records each `ResultMessage` (cost, turns, duration, SDK session id), so
+  `scc chat --resume <id>` continues a chat with `resume=`. A semaphore per event loop caps
+  concurrent requests (`SCC_MAX_CONCURRENT_REQUESTS`).
+- `EventTranslator` turns SDK messages into eight neutral events (`SpokeStarted`,
+  `ToolCalled`, `Finished`, ...). It uses `parent_tool_use_id` to nest each spoke's tool calls
+  under the right step. The CLI, the web UI and the evals all consume these events.
+
+### Live smoke test (2026-11-15)
+`scc ask "Why did revenue in Germany change in Nov 2011 vs Oct, and what should I restock?"`
+ran both specialists **in parallel**. Together they made about 20 tool calls, including three
+SQL queries for drivers. Every figure in the answer matches the tools (net £28,016 → £23,304,
+−16.8%). The hub proposed a purchase order and didn't create it unasked. It took 29 s and cost
+**$0.072**. All live runs in M4 together cost about $0.12.

@@ -7,7 +7,7 @@ down and delegates to five **specialist sub-agents** that analyse real e-commerc
 then writes an action brief. Anything that changes state (saving a listing draft, creating a
 purchase order) needs your **approval** through Approve/Deny buttons in the UI.
 
-> **Status:** work in progress. Milestones 1-3 of 7 (scaffold, data layer, tools and sub-agents) are done.
+> **Status:** work in progress. Milestones 1-4 of 7 are done: the agent system works from the terminal. The web UI is next.
 > See [docs/PLAN.md](docs/PLAN.md) for the full plan and [DESIGN.md](DESIGN.md) for the design decisions.
 
 ## Architecture (summary)
@@ -49,7 +49,20 @@ Ingest downloads about 45 MB and takes 1-2 minutes. Expected output:
          customers: 5852
 ```
 
-More commands (CLI, UI, evals, Docker) will be added as the milestones land.
+### Terminal client (live: uses your API credit)
+
+```bash
+uv run scc ask "Why did revenue in Germany change in Nov 2011 vs Oct, and what should I restock?"
+uv run scc ask -v "..."        # also show every specialist tool call
+uv run scc chat                # multi-turn chat; /exit to leave
+uv run scc chat --resume <id>  # continue an earlier chat
+uv run scc sessions            # recent chats and their cost
+```
+
+A typical question takes 20-40 seconds and costs about $0.03-0.10. Actions (draft purchase
+orders, listing drafts) ask for approval with a y/N prompt.
+
+More commands (UI, evals, Docker) will be added as the milestones land.
 
 ## Project layout
 

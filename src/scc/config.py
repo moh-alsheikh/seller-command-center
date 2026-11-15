@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     max_turns: int = Field(default=30, ge=1)
     max_budget_usd: float = Field(default=1.00, gt=0)
 
+    # Requests running at the same time across all chats. Each request runs a Claude Code
+    # CLI subprocess plus sub-agents, so this protects memory and the API rate limit.
+    max_concurrent_requests: int = Field(default=4, ge=1)
+
     # --- Human approval -------------------------------------------------------------------------
     # How long the UI waits for an Approve/Deny click before denying automatically.
     approval_timeout_s: int = Field(default=300, ge=5)

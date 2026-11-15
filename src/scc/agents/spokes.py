@@ -171,5 +171,6 @@ def build_spokes(
             tools=tools,
             model=getattr(settings, spec.model_setting),
             maxTurns=spec.max_turns,
+            background=False,  # the hub needs the report before it can answer
         )
     return agents
