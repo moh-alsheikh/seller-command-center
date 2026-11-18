@@ -308,6 +308,22 @@ for that request:
   written for the request and checked by the same SQL guard. The model never types a number
   into a chart.
 
+<p align="center">
+  <img src="docs/Screen-3.png" alt="In the chat: the Arabic report 'نتائج مبيعات 2026' with its three charts and the Open report / Save as PDF and Download Excel links" width="900">
+</p>
+
+*In the chat:* after the answer to *"نتائج مبيعات 2026"* (2026 sales results), the report
+message lists its charts (monthly revenue 2026 vs 2025, revenue by country, top 10 products by
+net revenue) with links to the full report and the Excel file.
+
+<p align="center">
+  <img src="docs/Screen-4.png" alt="The report page: Arabic title and summary, a 2026 vs 2025 monthly line chart, a revenue-by-country donut, a top-10 products ranking and the sources footer" width="560">
+</p>
+
+*The report page* (opened from the link; **Save as PDF** prints it to A4): the Arabic title and
+summary run right to left, the charts left to right, and the footer lists the source of every
+chart's numbers. All three charts here come from curated, tested analytics sources.
+
 Reports are saved in `data/reports/<id>/`. Their links keep working after the chat is
 reopened (the inline charts don't, because Chainlit has no local file storage).
 
