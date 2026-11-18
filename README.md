@@ -10,9 +10,9 @@ The hub combines their findings into a short brief with recommended next steps. 
 changes something, such as a draft purchase order or a product listing, happens **only after
 the seller clicks Approve**.
 
-> **Status:** all 7 milestones are built. It runs locally or in Docker. Evals: the harness and 27
-> cases are done; 2 have been run live (both pass) and **25 are pending** a full run
-> ([evals/report.md](evals/report.md)).
+> **Status:** all 7 milestones are built. It runs locally or in Docker on **real data re-dated to
+> the present** (currently 5 Nov 2024 → 13 Nov 2026). Evals: the harness and 27 date-relative
+> cases are done; **all 27 are pending** a live run ([evals/report.md](evals/report.md)).
 > Design decisions: [DESIGN.md](DESIGN.md) · Build plan and progress: [docs/PLAN.md](docs/PLAN.md)
 
 ---
@@ -31,7 +31,7 @@ the seller clicks Approve**.
 11. [Project layout](#11-project-layout)
 12. [Troubleshooting](#12-troubleshooting)
 13. [Limitations](#13-limitations)
-14. [Data and licences](#14-data-and-licences)
+14. [Data and licences](#14-data-and-licences) (incl. [Data and dates](#data-and-dates))
 
 ---
 
@@ -78,13 +78,19 @@ brief the seller can act on.
    the arithmetic.
 5. **SQL is read-only, enforced twice**: a locked-down database connection plus a SQL parser
    check before every query.
-6. **"Today" is fixed at 2011-12-09**, the last day in the data, so answers are reproducible.
+6. **"Today" is fixed per database build**: the last day in the data, read from the database
+   and stated in every prompt, so answers are reproducible. The demo data is re-dated to end
+   on the most recent Friday (see [Data and dates](#data-and-dates)).
 
 Each rule is explained, with the alternatives considered, in [DESIGN.md](DESIGN.md).
 
 ---
 
 ## 2. What it looks like in practice
+
+*This example is from a run on the original 2011 dates. Since then the data has been re-dated
+to the present (see [Data and dates](#data-and-dates)), so the same question now asks about
+October vs September 2026, with different figures.*
 
 **Question:** *"Why did revenue in Germany change in Nov 2011 vs Oct, and what should I
 restock?"*
@@ -206,8 +212,10 @@ Expected output of step 3:
 
 ```
       transactions: 1044848
-     first_invoice: 2009-12-01 07:45:00
-      last_invoice: 2011-12-09 12:50:00
+   date_shift_days: 5453          # whole weeks; depends on the day you build
+        as_of_date: 2026-11-13    # the most recent Friday before the build day
+     first_invoice: 2024-11-05 07:45:00
+      last_invoice: 2026-11-13 12:50:00
        sales_lines: 1015088
  sales_revenue_gbp: 19700954.46
           products: 4725
@@ -218,7 +226,7 @@ Check that everything is up:
 
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok","version":"0.1.0","as_of":"2011-12-09","retail_db":true,"app_db":true}
+# {"status":"ok","version":"0.1.0","as_of":"2026-11-13","retail_db":true,"app_db":true}
 ```
 
 Run commands from the project root: Chainlit reads `.chainlit/config.toml` and `chainlit.md`
@@ -259,11 +267,11 @@ cookies is generated on first start (`data/.chainlit_auth_secret`); set
 `CHAINLIT_AUTH_SECRET` yourself only if several servers must share it.
 
 ### Good questions to try
-- *How has net revenue developed by month in 2011 for our top 5 countries?*
+- *How has net revenue developed month by month over the last 12 months for our top 5 countries?*
 - *Which customers in the "Can't lose them" segment spent the most, and when did they last order?*
 - *What should I restock for the rest of December? Then draft a purchase order for the top 3.*
 - *What does the Regency Cakestand cost in EUR and USD, and how do its bulk price tiers work?*
-- *Write a listing for our best-selling product of 2011 and save it as a draft.*
+- *Write a listing for our best-selling product of this year and save it as a draft.*
 - *Remember: our target margin is 40%.*
 
 ---
@@ -273,7 +281,7 @@ cookies is generated on first start (`data/.chainlit_auth_secret`); set
 The CLI uses the same runtime as the web UI.
 
 ```bash
-uv run scc ask "Why did revenue in Germany change in Nov 2011 vs Oct?"
+uv run scc ask "Why did revenue in Germany change last month vs the month before?"
 uv run scc ask -v "..."          # verbose: also print every specialist tool call
 uv run scc chat                  # multi-turn chat; type /exit to leave
 uv run scc chat --resume <id>    # continue an earlier chat (our id or the SDK session id)
@@ -335,7 +343,7 @@ Everything is set through environment variables or `.env`. Defaults are in
 ### Offline unit tests (free, no network)
 
 ```bash
-uv run pytest        # 257 tests, ~10 seconds
+uv run pytest        # 269 tests, ~10 seconds
 make lint            # ruff check + format check
 ```
 
@@ -417,9 +425,10 @@ Dockerfile, docker-compose.yml, docker/entrypoint.sh   container build and start
 
 ## 13. Limitations
 
-- **Historical data.** The dataset ends on 2011-12-09, and the app treats that day as
-  "today". Exchange rates also default to that date (live "latest" rates are available on
-  request).
+- **Re-dated real data.** The transactions are real (2009–2011), moved forward by whole weeks
+  so they end on the most recent Friday. Figures and weekdays are real; calendar months
+  differ from the originals, and the seasonal peak lands about four weeks earlier (October
+  rather than November). Exchange rates are real ECB rates for the shifted dates.
 - **No stock levels or costs** in the data. Restock advice is expected demand to compare with
   stock on hand, and margins are only discussed if the seller gives a cost or target.
 - **Drafts stay inside the app.** Purchase orders and listings are saved as drafts and
@@ -435,6 +444,20 @@ Dockerfile, docker-compose.yml, docker/entrypoint.sh   container build and start
 ---
 
 ## 14. Data and licences
+
+### Data and dates
+
+The data is the real UCI Online Retail II dataset. To make the demo feel current, ingest moves
+every timestamp forward by a **whole number of weeks**, so the data ends on the **most recent
+Friday before the day you build it** (built on 18 Nov 2026: 5 Nov 2024 → 13 Nov 2026).
+
+- **All figures are real.** Totals, products, customers and orders are unchanged; only the
+  calendar moves.
+- **Weekdays are real**: the shop barely trades on Saturdays, and that pattern is kept.
+- **"Today" is read from the database** (`dataset_info.as_of_date`), so rebuilding later
+  re-dates the data again with no code change. The evals use relative dates ("last month",
+  "this year") for the same reason.
+- `uv run python -m scc.data.ingest --force --dates original` keeps the real 2009–2011 dates.
 
 - **Data:** [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii)
   by Daqing Chen, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It's downloaded

@@ -1,5 +1,6 @@
 """Tests for the eval harness (offline: a fake query() replays scripted SDK messages)."""
 
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -11,7 +12,7 @@ from scc.config import Settings
 from scc.data.db import connect_readonly
 from scc.evals import checks as C
 from scc.evals import runner
-from scc.evals.cases import EvalCase, Expect, load_cases
+from scc.evals.cases import EvalCase, Expect, eval_variables, load_cases, render_case
 from scc.evals.references import sql_scalar
 from scc.evals.report import render, summary
 from scc.store.app_db import AppStore
@@ -38,11 +39,36 @@ def test_case_file_is_valid_and_balanced():
 
 
 def test_reference_sql_runs_on_the_schema(con):
-    """Every reference query is valid SQL for our views (the fixture is tiny, values differ)."""
+    """Every reference query, once rendered, is valid SQL for our views (fixture values differ)."""
     for case in load_cases(CASES_FILE):
-        for sql in (case.expect.value_sql, case.expect.contains_all_sql):
+        rendered = render_case(case, AS_OF)
+        for sql in (rendered.expect.value_sql, rendered.expect.contains_all_sql):
             if sql:
                 con.execute(sql).fetchall()
+
+
+def test_cases_render_without_leftover_variables():
+    for case in load_cases(CASES_FILE):
+        r = render_case(case, date(2026, 11, 13))
+        text = " ".join(
+            filter(None, [r.question, r.expect.value_sql, r.expect.contains_all_sql,
+                          str((r.expect.value_ref or {}).get("args", ""))])
+        )  # fmt: skip
+        assert "$" not in text, case.id
+
+
+def test_eval_variables():
+    v = eval_variables(date(2026, 11, 13))
+    assert v["last_month_name"] == "October 2026" and v["last_month_end"] == "2026-10-31"
+    assert v["prev_month_start"] == "2026-09-01" and v["prev_month_end"] == "2026-09-30"
+    assert v["current_month_start"] == "2026-11-01" and v["year_start"] == "2026-01-01"
+
+
+def test_misspelt_variable_fails_loudly():
+    bad = EvalCase(id="x", category="routing", question="In $last_mnth_name?",
+                   expect=Expect(spokes_include=["sales_analyst"]))  # fmt: skip
+    with pytest.raises(KeyError):
+        render_case(bad, date(2026, 11, 13))
 
 
 def test_unknown_fields_and_spokes_are_rejected():

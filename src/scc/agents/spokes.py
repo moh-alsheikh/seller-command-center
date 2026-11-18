@@ -19,14 +19,15 @@ servers registered there. A spoke refers to its tools by qualified name.
 
 from __future__ import annotations
 
+from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from string import Template
 
 from claude_agent_sdk import AgentDefinition
 
-from scc.analytics.forecast import last_complete_month
+from scc.analytics.forecast import add_months, last_complete_month
 from scc.config import Settings, get_settings
 from scc.tools import ToolServer, mcp_name
 
@@ -115,13 +116,24 @@ SPOKES: dict[str, SpokeSpec] = {
 
 
 def prompt_variables(as_of: date) -> dict[str, str]:
-    """Values substituted into every prompt (design rule 6: the date is always stated)."""
+    """Values substituted into every prompt (design rule 6: the date is always stated).
+
+    Example dates in the prompts are relative ("last full month") rather than fixed, so the
+    prompts stay correct whatever date the data was shifted to.
+    """
     last_full = last_complete_month(as_of)
+    prev_full = add_months(last_full, -1)
     return {
         "as_of": as_of.isoformat(),
-        "as_of_long": f"{as_of:%A} {as_of.day} {as_of:%B %Y}",  # "Friday 9 December 2011"
+        "as_of_long": f"{as_of:%A} {as_of.day} {as_of:%B %Y}",  # e.g. "Friday 13 November 2026"
         "current_month": f"{as_of:%B %Y}",
+        "current_year": str(as_of.year),
         "last_full_month": f"{last_full:%B %Y}",
+        "last_full_month_start": last_full.isoformat(),
+        "last_full_month_end": (add_months(last_full, 1) - timedelta(days=1)).isoformat(),
+        "last_full_month_range": f"1-{monthrange(last_full.year, last_full.month)[1]} "
+        f"{last_full:%b %Y}",
+        "prev_full_month": f"{prev_full:%B %Y}",
     }
 
 
@@ -157,6 +169,10 @@ def build_spokes(
     fails at start-up rather than as a silent "tool not available" during a conversation.
     """
     settings = settings or get_settings()
+    if settings.as_of_date is None:
+        raise ValueError(
+            "as_of_date is not resolved; pass settings through scc.data.db.resolve_as_of first"
+        )
     available = {name for server in servers.values() for name in server.qualified_names}
 
     agents: dict[str, AgentDefinition] = {}

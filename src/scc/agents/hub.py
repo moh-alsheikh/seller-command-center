@@ -35,6 +35,7 @@ from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
 
 from scc.agents.spokes import PROMPTS_DIR, build_spokes, prompt_variables
 from scc.config import Settings, get_settings
+from scc.data.db import resolve_as_of
 from scc.hooks import TraceEvent, build_hooks
 from scc.permissions import ApprovalBroker, ToolPolicy
 from scc.store.app_db import AppStore
@@ -62,11 +63,13 @@ class HubRuntime:
     read_servers: dict[str, ToolServer] = field(init=False)
 
     def __post_init__(self) -> None:
+        # "Today" comes from the database unless set explicitly (design rule 6).
+        self.settings = resolve_as_of(self.settings)
         self.read_servers = build_servers(self.tool_ctx)
 
     @classmethod
     def create(cls, settings: Settings | None = None, store_path: Path | None = None) -> HubRuntime:
-        s = settings or get_settings()
+        s = resolve_as_of(settings or get_settings())
         store = AppStore(store_path or s.app_db_path)
         return cls(settings=s, store=store, tool_ctx=ToolContext.from_settings(s))
 

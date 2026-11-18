@@ -60,6 +60,7 @@ def main() -> None:
                 max_budget_usd=args.max_budget, dry_run=args.dry_run, on_done=progress)
     )  # fmt: skip
 
+    print(f"as-of (the data's today): {result.settings.as_of_date}")
     if args.dry_run:
         for case in cases:
             print(f"  {case.id:<40} {json.dumps(result.references[case.id], default=str)}")

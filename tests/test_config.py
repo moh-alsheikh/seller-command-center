@@ -15,11 +15,14 @@ def make_settings(**overrides) -> Settings:
 
 
 def test_defaults_match_the_plan(monkeypatch):
-    for var in ("SCC_HUB_MODEL", "SCC_AS_OF_DATE", "ANTHROPIC_API_KEY"):
+    for var in ("SCC_HUB_MODEL", "SCC_AS_OF_DATE", "SCC_DATA_DATES", "ANTHROPIC_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     s = make_settings()
 
-    assert s.as_of_date == date(2011, 12, 9)  # design rule 6: fixed reference date
+    # Design rule 6: the reference date is read from the database (scc.data.db.resolve_as_of)
+    # unless set explicitly; ingest shifts the data to recent dates by default.
+    assert s.as_of_date is None
+    assert s.data_dates == "recent"
     assert s.hub_model == "claude-sonnet-5-5"
     assert s.spoke_model == "claude-haiku-5-5"
     assert s.anthropic_api_key is None
@@ -62,3 +65,7 @@ def test_login_needs_both_user_and_password():
 def test_guard_rails_reject_non_positive_values(field, value):
     with pytest.raises(ValidationError):
         make_settings(**{field: value})
+
+
+def test_explicit_as_of_override():
+    assert make_settings(as_of_date="2026-11-13").as_of_date == date(2026, 11, 13)

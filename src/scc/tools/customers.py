@@ -16,10 +16,15 @@ RFM_NOTE = (
     "Scores 1-5 rank customers against each other (5 = most recent / most orders / highest "
     "spend). Guests without a customer ID are excluded."
 )
-COHORT_NOTE = (
-    "The 2009-12 cohort includes every customer active before the data starts (2009-12-01), "
-    "so its retention is overstated. Compare later cohorts with each other."
-)
+
+
+def cohort_note(first_month) -> str:
+    """Caveat for the first cohort in the data (its month depends on how the data was dated)."""
+    return (
+        f"The {first_month:%Y-%m} cohort is the first month in the data, so it includes every "
+        "customer who was already buying before the data starts; its retention is overstated. "
+        "Compare later cohorts with each other."
+    )
 
 
 def build_tools(ctx: ToolContext) -> list[SdkMcpTool[Any]]:
@@ -89,7 +94,12 @@ def build_tools(ctx: ToolContext) -> list[SdkMcpTool[Any]]:
         matrix = cohorts.retention_matrix(long)
         if from_cohort is not None and not matrix.empty:
             matrix = matrix[matrix["cohort_month"] >= from_cohort.replace(day=1)]
-        notes = [COHORT_NOTE] if (from_cohort is None or from_cohort.year < 2010) else None
+        # Show the caveat only when the table includes the first cohort in the data.
+        notes = None
+        if not long.empty and not matrix.empty:
+            first_month = long["cohort_month"].min()
+            if (matrix["cohort_month"] == first_month).any():
+                notes = [cohort_note(first_month)]
         return table(ctx, matrix, notes=notes)
 
     @tool(

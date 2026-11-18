@@ -20,13 +20,21 @@ or read files from disk.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
 
 from scc.config import get_settings
+
+if TYPE_CHECKING:
+    from scc.config import Settings
+
+log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------------
 # Views: the business rules
@@ -142,9 +150,69 @@ TABLE_DOCS: dict[str, str] = {
 DATASET_NOTES = """\
 Dataset: UCI Online Retail II, a UK online gift retailer selling mostly to wholesalers.
 All money is in GBP (pounds sterling). Dates are UK local time.
-Coverage: 2009-12-01 to 2011-12-09. December 2011 is a partial month (9 days).
 customer_id is NULL for about 1 in 4 lines (guest checkouts); customer analyses ignore those.
 Net revenue = SUM(sales.revenue) - SUM(returns.refund_value) for the same period."""
+
+
+def coverage_note(con: duckdb.DuckDBPyConnection) -> str:
+    """Which dates the data covers, read from dataset_info (never hard-coded).
+
+    The demo build shifts the real 2009-2011 dates forward by whole weeks, so the exact range
+    depends on the day the database was built.
+    """
+    first, last = con.execute(
+        "SELECT CAST(MIN(invoice_date) AS DATE), CAST(MAX(invoice_date) AS DATE) FROM transactions"
+    ).fetchone()
+    shift = 0
+    if _has_column(con, "dataset_info", "date_shift_days"):  # absent in pre-shift builds
+        shift = con.execute("SELECT MAX(date_shift_days) FROM dataset_info").fetchone()[0] or 0
+    note = (
+        f"Coverage: {first} to {last}. {last:%B %Y} is a partial month "
+        f"({last.day} days); the last complete month is the one before it."
+    )
+    if shift:
+        note += (
+            f" Dates are the real transactions moved forward by {shift} days (whole weeks, "
+            "so weekdays are real) to give current demo dates; all figures are real."
+        )
+    return note
+
+
+def _has_column(con: duckdb.DuckDBPyConnection, table: str, column: str) -> bool:
+    return bool(
+        con.execute(
+            "SELECT 1 FROM information_schema.columns WHERE table_name = $t AND column_name = $c",
+            {"t": table, "c": column},
+        ).fetchone()
+    )
+
+
+def read_as_of(path: Path) -> date:
+    """The data's "today": dataset_info.as_of_date, or the last invoice day for old builds."""
+    with connect_readonly(path) as con:
+        if _has_column(con, "dataset_info", "as_of_date"):
+            value = con.execute("SELECT MAX(as_of_date) FROM dataset_info").fetchone()[0]
+            if value is not None:
+                return value if isinstance(value, date) else value.date()
+        return con.execute("SELECT CAST(MAX(invoice_date) AS DATE) FROM transactions").fetchone()[0]
+
+
+def resolve_as_of(settings: Settings) -> Settings:
+    """Return settings with as_of_date filled in from the database (design rule 6).
+
+    One source of truth: the database records the last day in the data when it is built, so
+    "today" always matches the data, however the dates were shifted. An explicit
+    SCC_AS_OF_DATE still wins. If the database is missing (first start, before ingest), fall
+    back to yesterday so the app can start; /health reports the missing database.
+    """
+    if settings.as_of_date is not None:
+        return settings
+    try:
+        as_of = read_as_of(settings.duckdb_path)
+    except DatabaseMissingError:
+        as_of = date.today() - timedelta(days=1)
+        log.warning("Retail database missing; using %s as the reference date for now", as_of)
+    return settings.model_copy(update={"as_of_date": as_of})
 
 
 def create_views(con: duckdb.DuckDBPyConnection) -> None:
@@ -214,7 +282,7 @@ def describe_schema(con: duckdb.DuckDBPyConnection) -> str:
 
     # Most useful first: the views the agents should normally query.
     order = ["sales", "returns", "products", "transactions", "dataset_info"]
-    parts = [DATASET_NOTES, ""]
+    parts = [DATASET_NOTES, coverage_note(con), ""]
     for table in order:
         if table in columns:
             parts.append(f"{table}: {TABLE_DOCS[table]}")

@@ -4,7 +4,7 @@ Conventions all tools follow (so the agents see one consistent format):
 
 * **Success** returns one text block holding a JSON object, the "envelope"::
 
-      {"as_of": "2011-12-09", "currency": "GBP", "rows": [...], "row_count": 3,
+      {"as_of": "2026-11-13", "currency": "GBP", "rows": [...], "row_count": 3,
        "truncated": false, "notes": ["..."]}
 
   JSON rather than prose, because models read structured data reliably and the UI can
@@ -169,7 +169,7 @@ def opt_date(args: dict, name: str) -> date | None:
     try:
         return date.fromisoformat(str(raw))
     except ValueError as err:
-        raise ToolInputError(f"{name} must be a date like 2011-11-01, got {raw!r}.") from err
+        raise ToolInputError(f"{name} must be a date like YYYY-MM-DD, got {raw!r}.") from err
 
 
 def opt_str(args: dict, name: str) -> str | None:

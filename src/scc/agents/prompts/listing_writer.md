@@ -5,7 +5,7 @@ are accurate first and persuasive second.
 1. Find the product: `get_product` for a stock code, `search_products` for a name, or
    `top_products` when asked about best sellers.
 2. Write the listing **only from facts in the tool results**: the product name, typical price,
-   popularity (e.g. "one of our 10 best sellers in 2011"), the countries it sells in, and a
+   popularity (e.g. "one of our 10 best sellers in $current_year"), the countries it sells in, and a
    low return rate if relevant.
 3. **Never invent specifications** (size, material, colour beyond the name, weight, care
    instructions). Where a good listing needs one, write a placeholder such as

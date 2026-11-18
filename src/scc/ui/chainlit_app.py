@@ -138,11 +138,12 @@ async def starters(user=None, language=None) -> list[cl.Starter]:
     return [
         cl.Starter(
             label="Revenue trend by country",
-            message="How has net revenue developed by month in 2011 for our top 5 countries?",
+            message="How has net revenue developed month by month over the last 12 months "
+            "for our top 5 countries?",
         ),
         cl.Starter(
-            label="What should I restock for December?",
-            message="What should I restock for the rest of December, and roughly how many units?",
+            label="What should I restock?",
+            message="What should I restock for the rest of this month, and roughly how many units?",
         ),
         cl.Starter(
             label="Who are my best customers?",
@@ -150,7 +151,7 @@ async def starters(user=None, language=None) -> list[cl.Starter]:
         ),
         cl.Starter(
             label="Write a listing for my top product",
-            message="Write a listing for my best-selling product of 2011.",
+            message="Write a listing for my best-selling product of the last 12 months.",
         ),
     ]
 

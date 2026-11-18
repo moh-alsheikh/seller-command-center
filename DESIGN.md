@@ -18,8 +18,10 @@ These are the core ideas of the project. Each section below links back to them.
    calculate them.
 5. **SQL is read-only, enforced twice:** a read-only DuckDB connection, plus a `PreToolUse`
    hook that only allows a single `SELECT`.
-6. **The reference date is fixed at 2011-12-09**, the last day in the dataset, so relative
-   questions ("last 30 days") give reproducible answers.
+6. **The reference date is fixed per database build**: the last day in the data, read from
+   the database and stated in every prompt, so relative questions ("last 30 days") give
+   reproducible answers. (Originally 2011-12-09; the demo data is now re-dated to end on the
+   most recent Friday. See "Fresh demo dates" at the end.)
 
 ---
 
@@ -259,9 +261,10 @@ Checked against the live API before writing it: `api.frankfurter.dev/v1` works; 
 `api.frankfurter.app` now answers with **301** (so `follow_redirects=True`); weekend dates
 return the previous business day; unknown currencies return **404**.
 
-- **The default rate date is the reference date (2011-12-09), not today.** That's consistent
-  with design rule 6 (prices in a 2011 dataset are converted at 2011 rates) and keeps evals
-  reproducible, while still making a real HTTP call. `fx_date="latest"` is available when the
+- **The default rate date is the reference date, not today.** That's consistent with design
+  rule 6 (prices are converted at the rate of the data's "today") and keeps evals
+  reproducible, while still making a real HTTP call. With re-dated data the rates are real
+  ECB rates for the shifted dates. `fx_date="latest"` is available when the
   seller asks about today.
 - **Retries** (with exponential backoff) only for timeouts, connection errors and 5xx. A 4xx
   is our mistake and is reported immediately; it's never retried or sent to the fallback.
@@ -626,7 +629,7 @@ reverse proxy belongs in front before anyone else can reach it); `restart: unles
 |---|---|---|
 | SQLite for app state and chat history | one file, no extra service, fine for one instance | no multi-instance writes |
 | Approval futures in process memory | simple, testable, a fail-closed timeout | approvals need sticky sessions with more than one instance |
-| Fixed "today" (2011-12-09) | reproducible answers and evals | not a live shop |
+| Fixed "today" per build (re-dated real data) | reproducible answers and evals, yet current-looking | not a live shop; calendar months differ from the original data |
 | Seasonal-naive × trend forecast | explainable, strong baseline for 2 seasonal years | misses sudden breakouts (reported via `sold_so_far`) |
 | Single demo login | history needs a user; zero setup | not real user management |
 | Hub sees spoke tool *schemas* | `disallowed_tools` would break the spokes (verified) | a few hundred extra tokens per request; rule 1 is still enforced twice |
@@ -649,3 +652,58 @@ reverse proxy belongs in front before anyone else can reach it); `restart: unles
    schemas; try Haiku for the hub on simple routing questions, measured with the evals.
 7. **Live data:** replace the fixed date and the UCI file with an incremental feed. The views
    and analytics stay the same.
+
+---
+
+## After the milestones: fresh demo dates
+
+**Problem.** The data ended on 9 Dec 2011, so every demo answer said "2011", and the project
+looked stale.
+
+**Choice: re-date the real data instead of generating fake data.** Synthetic 2026 data would
+have broken an earlier decision (real data, exactly testable figures) and been a lot of
+work. Re-dating keeps every figure real. Ingest moves every timestamp forward by a **whole
+number of weeks** (`demo_shift_days`, `shift_dates` in `data/ingest.py`), so the data ends on
+the **most recent Friday before the build day**:
+
+| | Original | Built on 2026-11-18 |
+|---|---|---|
+| Coverage | 2009-12-01 → 2011-12-09 | 2024-11-05 → 2026-11-13 |
+| Shift | – | 5,453 days (779 weeks) |
+| Rows, revenue, products, customers | 1,044,848 · £19,700,954.46 · 4,725 · 5,852 | identical |
+
+Why these details:
+- **Whole weeks** keep weekdays real. The shop barely trades on Saturdays (30 of about 39,500
+  orders), and a calendar-year shift would have created Saturday rushes that never happened.
+- **Before the build day**, so ECB exchange rates for "today" are already published.
+- **Recorded, not hidden:** `dataset_info` stores `dates`, `date_shift_days` and the original
+  range, and the schema notes tell the agents that dates are shifted and figures are real.
+  `--dates original` rebuilds with the real 2009–2011 dates.
+
+**"Today" now comes from the database.** `Settings.as_of_date` defaults to `None`, and
+`db.resolve_as_of` fills it from `dataset_info.as_of_date` when the runtime is built
+(`HubRuntime`, the eval runner). Rebuilding next year re-dates the data and every prompt,
+tool and eval follows, with no code change. `SCC_AS_OF_DATE` can still override it.
+
+**Everything that named a date is now relative:**
+- prompt examples use `$last_full_month`, `$prev_full_month` and `$current_year`
+- the dataset coverage note and the cohort caveat are built from the data
+- UI starters say "last 12 months" and "this month"
+- eval cases use `$last_month_name`, `$year_start` and similar, filled in by
+  `render_case` with strict substitution, so a typo fails loudly
+
+**Known side effect:** calendar months no longer match the original months, and the seasonal
+peak moves about four weeks earlier (October 2026 rather than November). That's plausible
+for a wholesaler, because buyers stock up ahead of Christmas. The README's worked example is
+labelled as coming from a run on the original dates.
+
+**Housekeeping:** the 2011-era chats, chat history and agent session files were moved to
+`data/archive-2011/` (nothing deleted), with a copy of the 2011-dated database. The two
+earlier eval smoke results used 2011 questions, so `evals/report.md` is reset to "27
+pending".
+
+**Checks:** the rebuild reproduced every total. The weekday distribution is identical. All
+27 eval references compute on the new dates (free `--dry-run`). `/health` reports
+`as_of: 2026-11-13`. New offline tests cover the shift arithmetic (including a build day that
+is itself a Friday, and never shifting backwards), weekday preservation, `resolve_as_of`
+(database, override, missing database), the coverage note, and case rendering.

@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,9 +67,15 @@ class Settings(BaseSettings):
     approval_timeout_s: int = Field(default=300, ge=5)
 
     # --- Data ---------------------------------------------------------------------------------
-    # The dataset ends on 2011-12-09. Treating that day as "today" makes answers such as
-    # "last 30 days" reproducible and testable. It is stated in every agent prompt.
-    as_of_date: date = date(2011, 12, 9)
+    # "Today" for the agents (design rule 6). By default it is read from the database: the
+    # last day in the data (dataset_info.as_of_date), so it always matches the data that was
+    # built. Set SCC_AS_OF_DATE only to override it. See scc.data.db.resolve_as_of.
+    as_of_date: date | None = None
+
+    # How ingest dates the data: "recent" moves the real 2009-2011 transactions forward by
+    # whole weeks so they end on the most recent Friday (fresh demo dates); "original" keeps
+    # the real dates.
+    data_dates: Literal["recent", "original"] = "recent"
 
     data_dir: Path = PROJECT_ROOT / "data"
     uci_url: str = "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip"

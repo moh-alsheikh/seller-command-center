@@ -3,7 +3,13 @@
 import duckdb
 import pytest
 
-from scc.data.db import DatabaseMissingError, connect_readonly, describe_schema
+from scc.data.db import (
+    DatabaseMissingError,
+    connect_readonly,
+    describe_schema,
+    read_as_of,
+    resolve_as_of,
+)
 from tests.conftest import scalar
 
 
@@ -65,3 +71,23 @@ def test_describe_schema_lists_views_with_types(con):
     assert "sales: Product sales lines" in text
     assert "revenue DOUBLE" in text
     assert text.index("sales:") < text.index("transactions:")  # most useful first
+
+
+def test_coverage_note_comes_from_the_data(con):
+    text = describe_schema(con)
+    assert "Coverage: 2010-11-05 to 2011-12-09" in text  # the fixture's own range
+    assert "December 2011 is a partial month (9 days)" in text
+
+
+def test_resolve_as_of(retail_db, tmp_path):
+    from datetime import date
+
+    from scc.config import Settings
+
+    assert read_as_of(retail_db) == date(2011, 12, 9)  # last invoice day of the fixture
+    s = Settings(_env_file=None, data_dir=retail_db.parent)
+    assert resolve_as_of(s).as_of_date == date(2011, 12, 9)
+    explicit = Settings(_env_file=None, data_dir=retail_db.parent, as_of_date=date(2026, 1, 2))
+    assert resolve_as_of(explicit).as_of_date == date(2026, 1, 2)  # an override wins
+    missing = Settings(_env_file=None, data_dir=tmp_path / "none")
+    assert resolve_as_of(missing).as_of_date < date.today()  # app can still start

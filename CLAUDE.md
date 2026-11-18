@@ -3,7 +3,7 @@
 This file gives a new chat everything it needs. **The full approved plan is in [docs/PLAN.md](docs/PLAN.md). Read it before doing anything.**
 
 ## Current status
-- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **M6: harness done; 2/27 cases run (smoke, PASS); the other 25 are marked PENDING in evals/report.md by the user's choice. ASK before running the full eval (~$1.50-4).** M7 (Docker + docs) done 2026-11-15: `docker compose up -d --build`; all state in ./data (CLAUDE_CONFIG_DIR=/data/claude). Docker Desktop's disk was 100% full during testing; /tmp is tmpfs in compose. **All milestones built; remaining: the full eval run (ask first).** Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000` (login `seller` / `seller-demo` from `.env`; chat history on); headless UI check incl. login + reopen/resume: `scripts/ui_e2e.py`. Tests clear SCC_*/ANTHROPIC/CHAINLIT env vars (Chainlit's load_dotenv leaks .env). Progress table: PLAN.md → "Progress tracker".
+- The plan was approved on 2026-11-15. Milestones 1-5 done on 2026-11-15. **M6: harness done; all 27 cases PENDING (data re-dated on 2026-11-18; earlier 2-case smoke was on 2011 dates). ASK before running the full eval (~$1.50-4).** M7 (Docker + docs) done 2026-11-15: `docker compose up -d --build`; all state in ./data (CLAUDE_CONFIG_DIR=/data/claude). Docker Desktop's disk was 100% full during testing; /tmp is tmpfs in compose. **All milestones built; remaining: the full eval run (ask first).** Run the app with `uv run uvicorn scc.api.app:create_app --factory --port 8000` (login `seller` / `seller-demo` from `.env`; chat history on); headless UI check incl. login + reopen/resume: `scripts/ui_e2e.py`. Tests clear SCC_*/ANTHROPIC/CHAINLIT env vars (Chainlit's load_dotenv leaks .env). Progress table: PLAN.md → "Progress tracker".
 - Installed: `claude-agent-sdk` 0.2.182 (bundled CLI confirmed), project `.venv` on Python 3.13 via `uv`. Import package is `scc` (`src/scc/`); settings in `src/scc/config.py` use the `SCC_` env prefix (except `ANTHROPIC_API_KEY`).
 - Update the milestone checklist below as work progresses.
 
@@ -39,6 +39,7 @@ A **portfolio project** demonstrating production-level use of the **Claude Agent
 - macOS. Python 3.13 available (`python3.13`); default `python3` is 3.14. Use **`uv`** with Python 3.13 and a project `.venv`.
 - Docker 25 and Node 22 are installed.
 - `claude-agent-sdk` 0.2.180 (latest at the time) **bundles the Claude Code CLI** in `claude_agent_sdk/_bundled/claude`, so the Docker image does not need Node. Use a glibc base image (`python:3.13-slim`), not Alpine.
+- **Demo dates (2026-11-18):** ingest shifts the real data by whole weeks to end on the most recent Friday before the build day (`--dates recent`, default; `--dates original` = 2009-2011). Built 2026-11-18: 2024-11-05 → 2026-11-13, shift 5453 days. "Today" = `dataset_info.as_of_date` via `scc.data.db.resolve_as_of` (Settings.as_of_date defaults to None). Prompts/UI/evals use relative dates. Old 2011 chats are in `data/archive-2011/`.
 - Data facts (verified on the real file): 1,044,848 clean rows after removing the 22,523-row sheet overlap; sales revenue £19,700,954.46 over 1,015,088 lines; 4,725 products; 5,852 customers. Revenue = `sales` view (gross); rankings and forecasts use NET (minus `returns`) because of same-day bulk cancellations (e.g. 23843). Build with `uv run python -m scc.data.ingest` (~1.5 min).
 - Verified live by `scripts/check_sdk.py` (CLI 2.1.325): launcher tool is `Agent` (init lists `Task`; both accepted). `disallowed_tools` on the main session ALSO strips the tool from sub-agents, so don't use it; rule 1 = PreToolUse `hub_guard` (no `agent_id` ⇒ hub) + `ToolPolicy`. `can_use_tool` fires for hub AND sub-agent calls (`context.agent_id`). `allowed_tools=[]` so every call hits `can_use_tool`. The hub tried `run_in_background: true`; the policy forces it false. `.env` exists with the API key (git-ignored).
 - Frankfurter (verified live): `api.frankfurter.dev/v1` OK; `.app` returns 301 (follow redirects); weekend → previous business day; unknown currency → 404. FX defaults to the as-of date's rate.
@@ -72,7 +73,7 @@ External references for production patterns:
   - Least-privilege tools.
   - Metrics come from deterministic code.
   - SQL is read-only, enforced twice.
-  - The reference date is fixed at 2011-12-09.
+  - The reference date is fixed per database build (the last day in the data).
 - Unit tests must run offline (no Anthropic or HTTP calls; use `respx` for HTTP).
 - Live runs (smoke tests and evals) cost the user's API credit. Say so before running them; a full eval run is about $3–8.
 - Explain the design choices in `DESIGN.md` as you go. The user will study the code afterwards.

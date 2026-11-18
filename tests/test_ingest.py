@@ -1,8 +1,9 @@
 """Tests for scc.data.ingest: cleaning rules, sheet overlap, archive safety, atomic build."""
 
 import zipfile
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
+import duckdb
 import httpx
 import pandas as pd
 import pytest
@@ -12,11 +13,14 @@ from scc.data.ingest import (
     IngestError,
     add_flags,
     build_database,
+    demo_shift_days,
     download,
     extract_workbook,
     is_product_code,
     normalize,
     remove_sheet_overlap,
+    run,
+    shift_dates,
     summarize,
 )
 from tests.conftest import raw_frame
@@ -129,3 +133,61 @@ def test_build_database_is_atomic_and_summarizes(tmp_path):
     assert s["sales_revenue_gbp"] == 100.0
     assert s["products"] == 3
     assert s["customers"] == 3
+
+
+# --- demo dates -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "build_day,expected_end",
+    [
+        (date(2026, 11, 18), date(2026, 11, 13)),  # Wednesday -> last Friday
+        (date(2026, 11, 13), date(2026, 11, 6)),  # a Friday -> the Friday BEFORE it
+        (date(2026, 11, 14), date(2026, 11, 13)),  # Saturday -> yesterday (a Friday)
+        (date(2011, 12, 9), date(2011, 12, 9)),  # nothing to shift: never moves backwards
+    ],
+)
+def test_demo_shift_days(build_day, expected_end):
+    original_end = date(2011, 12, 9)  # a Friday
+    shift = demo_shift_days(original_end, build_day)
+    assert shift % 7 == 0  # whole weeks: weekdays are kept
+    assert original_end + timedelta(days=shift) == expected_end
+
+
+def test_shift_dates_keeps_order_weekdays_and_rows():
+    df = normalize(raw_frame())
+    shifted = shift_dates(df, 5453)
+    assert len(shifted) == len(df)
+    assert (shifted["invoice_date"].dt.day_of_week == df["invoice_date"].dt.day_of_week).all()
+    assert (shifted["invoice_date"] - df["invoice_date"]).dt.days.eq(5453).all()
+    assert df["invoice_date"].min().year == 2010  # the input is not modified
+    assert shift_dates(df, 0) is df
+
+
+def test_run_records_shift_and_as_of(tmp_path, monkeypatch):
+    """The whole pipeline with the Excel step faked: dates shifted, metadata recorded."""
+    import scc.data.ingest as ingest
+    from scc.config import Settings
+
+    settings = Settings(_env_file=None, data_dir=tmp_path)
+    (tmp_path / "raw").mkdir()
+    (tmp_path / "raw" / "online_retail_ii.zip").write_bytes(b"cached")
+    monkeypatch.setattr(ingest, "extract_workbook", lambda z, d: d / "x.xlsx")
+    monkeypatch.setattr(ingest, "read_sheets", lambda p: {"one sheet": raw_frame()})
+
+    db = run(settings, build_day=date(2026, 11, 18))
+    con = duckdb.connect(str(db), read_only=True)
+    info = con.execute(
+        "SELECT dates, date_shift_days, as_of_date, original_last_invoice FROM dataset_info"
+    ).fetchone()
+    con.close()
+    assert info[0] == "recent" and info[1] % 7 == 0
+    assert info[2] == date(2026, 11, 13)  # fixture ends Fri 2011-12-09 -> Fri 2026-11-13
+    assert info[3].date() == date(2011, 12, 9)
+
+    db2 = run(settings, force=True, dates="original")
+    con = duckdb.connect(str(db2), read_only=True)
+    assert con.execute("SELECT as_of_date, date_shift_days FROM dataset_info").fetchone() == (
+        date(2011, 12, 9), 0,
+    )  # fmt: skip
+    con.close()

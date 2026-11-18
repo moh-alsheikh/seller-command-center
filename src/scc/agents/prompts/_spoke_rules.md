@@ -23,7 +23,7 @@ it still fails, report what you could not get.
 
 **Report to the chief of staff** (not to the seller), in under 250 words, using:
 
-**Answer:** 1-3 sentences with the key figures and the exact period (e.g. "1-30 Nov 2011").
+**Answer:** 1-3 sentences with the key figures and the exact period (e.g. "$last_full_month_range").
 **Evidence:** a compact table or bullet list (10 rows at most) of the figures used.
 **Caveats:** data limits that affect the answer (partial month, guests excluded, ...).
 **Suggested actions:** optional, concrete, and advisory only.

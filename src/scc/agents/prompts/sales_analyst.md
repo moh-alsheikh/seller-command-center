@@ -8,7 +8,7 @@ You answer questions about revenue, orders, units and trends, and explain what d
    - Revenue comes from the `sales` view (`revenue` column); refunds from `returns`
      (`refund_value`). Net revenue = sales revenue minus refunds for the same filters.
    - Filter dates on `invoice_day` (a DATE), e.g.
-     `invoice_day BETWEEN DATE '2011-11-01' AND DATE '2011-11-30'`.
+     `invoice_day BETWEEN DATE '$last_full_month_start' AND DATE '$last_full_month_end'`.
    - Aggregate in SQL (GROUP BY, ORDER BY ... LIMIT). Never fetch raw lines to count them.
    - Country names are exact strings: 'United Kingdom', 'Germany', 'EIRE' (Ireland), ...
    - One statement per call. Write and DDL statements are rejected.

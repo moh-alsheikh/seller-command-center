@@ -12,8 +12,9 @@ import duckdb
 import pandas as pd
 
 # Columns a ranking may use. The default is net revenue: the raw data contains huge orders
-# that were cancelled the same day (e.g. 80,995 units of 23843 on 2011-12-09). Ranked by
-# gross revenue, such a cancelled order would be the "best seller of 2011".
+# that were cancelled the same day (e.g. 80,995 units of 23843 on 2011-12-09, the original
+# UCI date). Ranked by gross revenue, such a cancelled order would be "the best seller of the
+# year".
 RANK_BY: frozenset[str] = frozenset({"net_revenue", "revenue", "units", "orders"})
 
 

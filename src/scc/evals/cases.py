@@ -4,22 +4,29 @@ A case is a question plus expectations. Every expectation is optional, so one fo
 accuracy (a figure within tolerance), routing (which specialists ran) and safety (what must
 NOT happen). Example (YAML)::
 
-    - id: acc_net_revenue_germany_nov
+    - id: acc_net_revenue_germany_last_month
       category: accuracy
-      question: What was our net revenue from Germany in November 2011?
+      question: What was our net revenue from Germany in $last_month_name?
       expect:
-        value_sql: SELECT ...        # ground truth, computed when the eval runs
+        value_sql: SELECT ... BETWEEN DATE '$last_month_start' AND DATE '$last_month_end'
         tolerance_pct: 0.5
         spokes_include: [sales_analyst]
+
+Dates are never fixed in a case. ``$variables`` are filled in from the data's "today"
+(``render_case``), because the demo data is re-dated to the present whenever it is built.
 """
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
+from string import Template
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from scc.analytics.forecast import add_months, last_complete_month
 
 Category = Literal["accuracy", "routing", "safety"]
 SPOKES = {
@@ -83,6 +90,58 @@ def load_cases(path: Path) -> list[EvalCase]:
     if duplicates:
         raise ValueError(f"duplicate case ids: {sorted(duplicates)}")
     return cases
+
+
+def eval_variables(as_of: date) -> dict[str, str]:
+    """Date variables available to cases, relative to the data's "today"."""
+    last = last_complete_month(as_of)
+    prev = add_months(last, -1)
+    current = as_of.replace(day=1)
+
+    def month_end(m: date) -> str:
+        return (add_months(m, 1) - timedelta(days=1)).isoformat()
+
+    return {
+        "as_of": as_of.isoformat(),
+        "year": str(as_of.year),
+        "year_start": f"{as_of.year}-01-01",
+        "last_month_start": last.isoformat(),
+        "last_month_end": month_end(last),
+        "last_month_name": f"{last:%B %Y}",
+        "prev_month_start": prev.isoformat(),
+        "prev_month_end": month_end(prev),
+        "prev_month_name": f"{prev:%B %Y}",
+        "current_month_start": current.isoformat(),
+        "current_month_name": f"{current:%B %Y}",
+    }
+
+
+def render_case(case: EvalCase, as_of: date) -> EvalCase:
+    """Fill in $variables in the question, the reference SQL and reference arguments.
+
+    ``substitute`` (not ``safe_substitute``): a misspelt variable fails loudly instead of
+    reaching the model or the database as "$last_mnth_name".
+    """
+    variables = eval_variables(as_of)
+
+    def fill(text: str | None) -> str | None:
+        return Template(text).substitute(variables) if text else text
+
+    e = case.expect
+    value_ref = None
+    if e.value_ref:
+        args = {
+            k: fill(v) if isinstance(v, str) else v for k, v in e.value_ref.get("args", {}).items()
+        }
+        value_ref = {**e.value_ref, "args": args}
+    expect = e.model_copy(
+        update={
+            "value_sql": fill(e.value_sql),
+            "contains_all_sql": fill(e.contains_all_sql),
+            "value_ref": value_ref,
+        }
+    )
+    return case.model_copy(update={"question": fill(case.question), "expect": expect})
 
 
 # The hub must end every eval run with this JSON (query(..., output_format=...)).

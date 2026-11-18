@@ -156,7 +156,7 @@ def test_health_ok(client):
 
 
 def test_health_degraded_without_retail_db(runtime, tmp_path):
-    runtime.settings = Settings(_env_file=None, data_dir=tmp_path / "empty")
+    runtime.settings = Settings(_env_file=None, data_dir=tmp_path / "empty", as_of_date=AS_OF)
     r = TestClient(create_app(runtime, mount_ui=False)).get("/health")
     assert r.status_code == 503 and r.json()["retail_db"] is False
 
@@ -194,7 +194,7 @@ def test_api_is_read_only(client):
 
 def test_api_token(runtime):
     runtime.settings = Settings(
-        _env_file=None, data_dir=runtime.settings.data_dir, api_token="s3cret"
+        _env_file=None, data_dir=runtime.settings.data_dir, api_token="s3cret", as_of_date=AS_OF
     )
     client = TestClient(create_app(runtime, mount_ui=False))
     assert client.get("/api/memory").status_code == 401

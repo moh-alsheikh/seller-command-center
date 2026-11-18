@@ -1,6 +1,6 @@
 """Terminal client. Uses the same AgentSession runtime as the web UI.
 
-    uv run scc ask "Why did revenue in Germany change in Nov 2011 vs Oct?"
+    uv run scc ask "Why did revenue in Germany change last month vs the month before?"
     uv run scc chat                      # multi-turn chat; type /exit to leave
     uv run scc chat --resume <id>        # continue an earlier chat (our id or the SDK's)
     uv run scc sessions                  # recent chats with their cost

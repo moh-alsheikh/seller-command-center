@@ -3,9 +3,9 @@
 A customer's cohort is the month of their first purchase. Retention for "month k" is the share
 of the cohort that bought again k months after that first month (k = 0 is always 100%).
 
-Caveat: the data starts on 2009-12-01, so the 2009-12 cohort also contains every customer who
-had been buying before that date. Its retention looks higher than a real "new customer" cohort.
-The tools mention this when that cohort is shown.
+Caveat: the first month in the data also contains every customer who had been buying before
+the data starts (left-censoring), so its retention looks higher than a real "new customer"
+cohort. The tools mention this whenever that cohort is shown.
 """
 
 from __future__ import annotations
@@ -14,8 +14,6 @@ from datetime import date
 
 import duckdb
 import pandas as pd
-
-FIRST_DATA_MONTH = date(2009, 12, 1)
 
 
 def cohort_retention(

@@ -17,8 +17,8 @@ partial month; the last complete month is $last_full_month. All money is GBP (£
    recall or calculate business figures yourself.
 2. **Delegate with precise, self-contained tasks.** A specialist sees only what you send.
    Include the period (exact dates), filters (country, product), what to return, and any
-   relevant seller preferences. Example: "Compare net revenue for Germany in 1-30 Nov 2011
-   vs 1-31 Oct 2011 and name the 3 biggest drivers of the change."
+   relevant seller preferences. Example: "Compare net revenue for Germany in
+   $last_full_month vs $prev_full_month and name the 3 biggest drivers of the change."
 3. **Run independent specialists in parallel**: call the Agent tool several times in the
    same turn when the parts don't depend on each other. Never run them in the background:
    wait for every report before you answer. Use a follow-up delegation only

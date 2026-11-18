@@ -12,6 +12,8 @@ Pipeline (each step is a small function, so each can be unit-tested on its own):
     read_sheets()          two sheets, "Year 2009-2010" and "Year 2010-2011" (slow: 1-2 min)
     normalize()            snake_case columns, clean types, upper-case stock codes
     remove_sheet_overlap() drop the 9 days that appear in both sheets
+    shift_dates()          move every date forward by whole weeks, so the data ends on the
+                           most recent Friday (fresh demo dates; see "Demo dates" below)
     add_flags()            is_cancellation, is_product
     build_database()       write table + views + metadata into a temp file, then rename
 
@@ -22,6 +24,13 @@ Facts about the raw data that shaped these steps (checked on the real file, 2026
     5,131 after upper-casing and trimming.
   * "Customer ID" is read as a float (12346.0) because of blanks; we store a nullable integer.
   * Some stock codes are not products: postage, fees, manual adjustments, test items, vouchers.
+
+Demo dates: the real data ends on Friday 2011-12-09. By default (``--dates recent``) every
+timestamp is moved forward by a whole number of weeks, so the data ends on the most recent
+Friday before the day the database is built. Whole weeks keep the weekday pattern intact (the
+shop barely trades on Saturdays); every figure stays the real one, only the calendar moves.
+``--dates original`` keeps the 2009-2011 dates. dataset_info records the shift and the
+original range. "Today" for the agents is dataset_info.as_of_date (see db.resolve_as_of).
 """
 
 from __future__ import annotations
@@ -31,7 +40,7 @@ import hashlib
 import logging
 import os
 import zipfile
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -208,6 +217,27 @@ def remove_sheet_overlap(sheets: list[pd.DataFrame]) -> tuple[pd.DataFrame, int]
     return combined, removed
 
 
+def demo_shift_days(original_end: date, build_day: date) -> int:
+    """Days to add so the data ends on the latest same-weekday date BEFORE ``build_day``.
+
+    Always a whole number of weeks, so every order keeps its weekday. The end date is strictly
+    before the build day, so exchange rates for "today" are already published.
+    Example: original end Fri 2011-12-09, built Wed 2026-11-18 -> 5453 days (779 weeks),
+    data ends Fri 2026-11-13.
+    """
+    weeks = (build_day - timedelta(days=1) - original_end).days // 7
+    return max(weeks, 0) * 7
+
+
+def shift_dates(df: pd.DataFrame, days: int) -> pd.DataFrame:
+    """Move every invoice timestamp forward by ``days``. Order and row count are unchanged."""
+    if days == 0:
+        return df
+    out = df.copy()
+    out["invoice_date"] = out["invoice_date"] + pd.Timedelta(days=days)
+    return out
+
+
 def is_product_code(code: str) -> bool:
     return code not in NON_PRODUCT_CODES and not code.startswith(NON_PRODUCT_PREFIXES)
 
@@ -275,9 +305,18 @@ def summarize(db_path: Path) -> dict[str, object]:
         (n_customers,) = con.execute(
             "SELECT COUNT(DISTINCT customer_id) FROM sales WHERE customer_id IS NOT NULL"
         ).fetchone()
+        info = dict(
+            zip(
+                [d[0] for d in con.execute("SELECT * FROM dataset_info").description],
+                con.execute("SELECT * FROM dataset_info").fetchone(),
+                strict=True,
+            )
+        )
     finally:
         con.close()
     return {
+        "date_shift_days": info.get("date_shift_days", 0),
+        "as_of_date": str(info.get("as_of_date")),
         "transactions": rows,
         "first_invoice": str(first),
         "last_invoice": str(last),
@@ -293,9 +332,21 @@ def summarize(db_path: Path) -> dict[str, object]:
 # --------------------------------------------------------------------------------------------
 
 
-def run(settings: Settings | None = None, *, force: bool = False) -> Path:
-    """Run the whole pipeline. Returns the path of the database."""
+def run(
+    settings: Settings | None = None,
+    *,
+    force: bool = False,
+    dates: str | None = None,
+    build_day: date | None = None,
+) -> Path:
+    """Run the whole pipeline. Returns the path of the database.
+
+    dates: "recent" (default, shift to the most recent Friday) or "original" (2009-2011).
+    """
     settings = settings or get_settings()
+    dates = dates or settings.data_dates
+    if dates not in ("recent", "original"):
+        raise ValueError("dates must be 'recent' or 'original'")
     db_path = settings.duckdb_path
     if db_path.exists() and not force:
         log.info("%s already exists; use --force to rebuild", db_path)
@@ -308,7 +359,13 @@ def run(settings: Settings | None = None, *, force: bool = False) -> Path:
 
     cleaned = [normalize(df) for df in sheets.values()]
     combined, overlap = remove_sheet_overlap(cleaned)
-    final = add_flags(combined)
+    original_first = combined["invoice_date"].min()
+    original_last = combined["invoice_date"].max()
+    shift = (
+        demo_shift_days(original_last.date(), build_day or date.today()) if dates == "recent" else 0
+    )
+    final = add_flags(shift_dates(combined, shift))
+    last = final["invoice_date"].max()
 
     info = {
         "source": "UCI Online Retail II (CC BY 4.0)",
@@ -319,8 +376,13 @@ def run(settings: Settings | None = None, *, force: bool = False) -> Path:
         "overlap_rows_removed": overlap,
         "rows": len(final),
         "first_invoice": final["invoice_date"].min(),
-        "last_invoice": final["invoice_date"].max(),
-        "as_of_date": settings.as_of_date,
+        "last_invoice": last,
+        # "Today" for the agents: the last day in the data (design rule 6).
+        "as_of_date": last.date(),
+        "dates": dates,
+        "date_shift_days": shift,
+        "original_first_invoice": original_first,
+        "original_last_invoice": original_last,
         "ingested_at": datetime.now(UTC).replace(tzinfo=None),
     }
     build_database(final, db_path, info)
@@ -330,10 +392,16 @@ def run(settings: Settings | None = None, *, force: bool = False) -> Path:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--force", action="store_true", help="rebuild even if the DB exists")
+    parser.add_argument(
+        "--dates",
+        choices=["recent", "original"],
+        help="recent: shift so the data ends on the most recent Friday (default); "
+        "original: keep the real 2009-2011 dates",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(message)s")
-    db_path = run(force=args.force)
+    db_path = run(force=args.force, dates=args.dates)
     for key, value in summarize(db_path).items():
         print(f"{key:>18}: {value}")
 

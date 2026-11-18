@@ -14,7 +14,7 @@ from tests.conftest import AS_OF
 
 @pytest.fixture
 def settings():
-    return Settings(_env_file=None)
+    return Settings(_env_file=None, as_of_date=AS_OF)
 
 
 @pytest.fixture
@@ -76,13 +76,21 @@ def test_descriptions_are_routing_guidance(servers, settings):
 
 
 def test_prompt_variables():
-    v = prompt_variables(date(2011, 12, 9))
+    v = prompt_variables(date(2026, 11, 13))
     assert v == {
-        "as_of": "2011-12-09",
-        "as_of_long": "Friday 9 December 2011",
-        "current_month": "December 2011",
-        "last_full_month": "November 2011",
+        "as_of": "2026-11-13",
+        "as_of_long": "Friday 13 November 2026",
+        "current_month": "November 2026",
+        "current_year": "2026",
+        "last_full_month": "October 2026",
+        "last_full_month_start": "2026-10-01",
+        "last_full_month_end": "2026-10-31",
+        "last_full_month_range": "1-31 Oct 2026",
+        "prev_full_month": "September 2026",
     }
+    # Year boundary: in January the last full month is December of the previous year.
+    jan = prompt_variables(date(2027, 1, 8))
+    assert (jan["last_full_month"], jan["prev_full_month"]) == ("December 2026", "November 2026")
 
 
 @pytest.mark.parametrize("name", list(SPOKES))

@@ -107,8 +107,9 @@ def monthly_units(
     """Net units (sold minus returned, floored at 0) per (stock_code, month).
 
     Net, because the raw data has huge orders cancelled the same day (80,995 units of 23843
-    on 2011-12-09); counting them as demand would wreck the forecast. Floored at 0 because a
-    month dominated by returns of earlier sales does not mean negative demand.
+    on 2011-12-09, original UCI date); counting them as demand would wreck the forecast.
+    Floored at 0 because a month dominated by returns of earlier sales does not mean
+    negative demand.
 
     Columns: stock_code, month, units.
     """
@@ -171,14 +172,15 @@ def _month_start(d: date) -> date:
     return date(d.year, d.month, 1)
 
 
-def _add_months(d: date, n: int) -> date:
+def add_months(d: date, n: int) -> date:
+    """First day of the month n months after d's month (n may be negative)."""
     total = d.year * 12 + (d.month - 1) + n
     return date(total // 12, total % 12 + 1, 1)
 
 
 def last_complete_month(as_of: date) -> date:
-    """The latest month that is fully inside the data. For 2011-12-09 that is 2011-11-01."""
-    return _add_months(_month_start(as_of), -1)
+    """The latest month that is fully inside the data. For 2026-11-13 that is 2026-10-01."""
+    return add_months(_month_start(as_of), -1)
 
 
 def forecast_series(
@@ -187,7 +189,7 @@ def forecast_series(
     """Forecast the next ``horizon`` months after the last complete month.
 
     ``units_by_month`` is indexed by month-start ``date`` values; missing months count as 0.
-    With as_of = 2011-12-09 and horizon = 1, the forecast is for December 2011 (the current,
+    With as_of = 2026-11-13 and horizon = 1, the forecast is for November 2026 (the current,
     partial month). ``sold_so_far`` reports what has already sold in it.
     """
 
@@ -195,9 +197,9 @@ def forecast_series(
         return float(units_by_month.get(m, 0.0))
 
     last_full = last_complete_month(as_of)
-    recent = [_add_months(last_full, -i) for i in range(TREND_WINDOW_MONTHS)]
+    recent = [add_months(last_full, -i) for i in range(TREND_WINDOW_MONTHS)]
     recent_units = sum(units(m) for m in recent)
-    prior_units = sum(units(_add_months(m, -12)) for m in recent)
+    prior_units = sum(units(add_months(m, -12)) for m in recent)
 
     trend: float | None = None
     if prior_units > 0:
@@ -205,8 +207,8 @@ def forecast_series(
 
     results: list[MonthForecast] = []
     for step in range(1, horizon + 1):
-        target = _add_months(last_full, step)
-        last_year_units = units(_add_months(target, -12))
+        target = add_months(last_full, step)
+        last_year_units = units(add_months(target, -12))
         if last_year_units > 0 and trend is not None:
             value, method = last_year_units * trend, "seasonal_naive_x_trend"
         elif last_year_units > 0:
@@ -252,7 +254,7 @@ def forecast_top_products(
     Columns: stock_code, description, recent_units, plus the MonthForecast fields.
     """
     last_full = last_complete_month(as_of)
-    window_start = _add_months(last_full, -(TREND_WINDOW_MONTHS - 1))
+    window_start = add_months(last_full, -(TREND_WINDOW_MONTHS - 1))
 
     # One query for every product's monthly net units (a few thousand products x 25 months is
     # small), then rank in pandas. Ranking and forecasting use the same numbers.

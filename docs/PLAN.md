@@ -31,7 +31,7 @@ Design rules (each one written up in DESIGN.md as an interview talking point):
 3. **Least privilege:** `tools=["Task"]` (built-ins are otherwise off; this fixes the gotcha found in Stage 0 of the workshop). Each `AgentDefinition` lists only its own MCP tools.
 4. **Metrics come from deterministic code** (RFM, cohorts, forecast), so numbers are exact and testable. The LLM interprets them; it doesn't calculate them.
 5. **Read-only data access is enforced twice:** DuckDB `read_only=True` connection, plus a `PreToolUse` hook using `sqlglot` that allows only a single SELECT.
-6. **Fixed reference date:** the dataset's "today" is `2011-12-09` and is stated in every prompt.
+6. **Fixed reference date:** the dataset's "today" is fixed per database build (the last day in the data) and stated in every prompt. *(Updated 2026-11-18: the demo data is re-dated by whole weeks to end on the most recent Friday; originally `2011-12-09`.)*
 
 ## Repo layout (new project)
 ```
@@ -116,8 +116,9 @@ Update this table when a milestone starts or finishes. A commit can't contain it
 | 3 | Tools and spokes | ✅ | 2026-11-15 | `e37c178` | 171 pass | 5 MCP servers / 14 tools (JSON envelope, errors returned, strict schemas); 5 AgentDefinitions with least privilege; FX defaults to as-of date; added `revenue_summary`; hub tool-visibility check moved to M4 |
 | 4 | Hub, hooks, permissions, memory | ✅ | 2026-11-15 | `54fee25` | 216 pass | check_sdk: launcher=`Agent`; `disallowed_tools` propagates to sub-agents, so rule 1 is enforced by a PreToolUse hook + `can_use_tool` (allowed_tools empty); forced foreground sub-agents; approval tokens; live smoke $0.072 |
 | 5 | Seller UI and API | ✅ | 2026-11-15 | `b91d799`, `0242796`, `d29a7a2` | 233 pass | Chainlit mounted at `/` in FastAPI; UI-agnostic ChatController; approvals via `init_ws_context`; read-only API; README rewritten. **Added after review: chat history** (login + Chainlit SQLAlchemy data layer on SQLite + `on_chat_resume` → SDK `resume=`); e2e PASS incl. reopen + memory |
-| 6 | Evals | ✅ harness · ⏳ 25 cases pending | 2026-11-15 | `591fad7` + report commit | 257 pass | 27 cases (16 accuracy / 5 routing / 6 safety); references computed live; graded on evidence + invariants on every case; isolated workspace with planted injection. **Run: 2/27 (smoke, both PASS, $0.08). Pending: 25 cases (15 accuracy, 5 routing, 5 safety)**, listed in `evals/report.md`; complete with `uv run python evals/run_evals.py` (~$1.50-4) |
+| 6 | Evals | ✅ harness · ⏳ all 27 pending | 2026-11-15 | `591fad7`, `4e7fe60` | – | 27 cases (16 accuracy / 5 routing / 6 safety); references computed live; graded on evidence + invariants on every case; isolated workspace with planted injection. Smoke 2/2 PASS on 2011 dates (stale after re-dating). **All 27 pending** a live run; cases are now date-relative (`render_case`) |
 | 7 | Docker and docs | ✅ | 2026-11-15 | `M7:` commit | 257 pass | `python:3.13-slim` + uv (frozen), non-root, healthcheck; all state in `./data` incl. CLI sessions (`CLAUDE_CONFIG_DIR`) so resume survives restarts; `/tmp` as tmpfs after a full Docker disk broke the CLI; verified in container: health, login, CLI call, restart persistence |
+| + | Fresh demo dates | ✅ | 2026-11-18 | `M8:` commit | 269 pass | Real data shifted by whole weeks to end on the most recent Friday (built 2026-11-18: 2024-11-05 → 2026-11-13, shift 5453 days; totals unchanged); "today" read from `dataset_info`; prompts, UI and evals date-relative; 2011 chats archived to `data/archive-2011/`; eval report reset to 27 pending |
 
 ## Assumptions to verify early (`scripts/check_sdk.py`, milestone 4)
 - The name of the sub-agent launcher tool when `tools=[...]` restricts built-ins (`"Task"` vs `"Agent"`). The script checks which one starts a spoke.

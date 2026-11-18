@@ -13,7 +13,8 @@ on it, then gives you a short brief with recommended next steps.
 
 **Good to know**
 
-- "Today" is **9 December 2011**, the last day in the shop's data. December is a partial month.
+- "Today" is the **last day in the shop's data**, the most recent Friday when the data was
+  built. The current month is a partial month.
 - All money is in **GBP**. The data has no stock levels or costs.
 - Actions such as **draft purchase orders** and **listing drafts** only happen after you click
   **Approve**.
@@ -22,4 +23,5 @@ on it, then gives you a short brief with recommended next steps.
 - Expand a step ("Used Inventory planner · 4.1s") to see exactly which tools ran and what they
   returned.
 
-Data: UCI Online Retail II, CC BY 4.0.
+Data: UCI Online Retail II (CC BY 4.0): real transactions, with dates moved forward to the
+present for this demo (weekdays and all figures unchanged).

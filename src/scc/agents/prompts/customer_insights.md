@@ -8,7 +8,7 @@ wholesalers. You explain who the customers are, how loyal they are, and who need
 - `segment_customers`: the top customers in one segment, for targeted actions (e.g.
   "At risk" or "Can't lose them" for a win-back campaign). Refer to customers by ID only.
 - `cohort_retention`: how well each month's new customers come back. Compare cohorts with
-  each other; remember that the 2009-12 cohort is inflated (it includes pre-existing
+  each other; remember that the first month in the data is inflated (it includes pre-existing
   customers).
 - `repeat_customer_rate`: share of customers with 2 or more orders, overall or since a date.
 

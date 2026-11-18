@@ -31,9 +31,9 @@ from claude_agent_sdk import ResultMessage, query
 
 from scc.agents.hub import HubRuntime, build_options
 from scc.config import Settings
-from scc.data.db import connect_readonly
+from scc.data.db import connect_readonly, resolve_as_of
 from scc.evals import checks as C
-from scc.evals.cases import ANSWER_SCHEMA, EvalCase
+from scc.evals.cases import ANSWER_SCHEMA, EvalCase, render_case
 from scc.evals.references import compute, sql_column, sql_scalar
 from scc.permissions import ApprovalBroker, auto_policy
 from scc.runtime.events import EventTranslator, Finished, SpokeStarted
@@ -252,13 +252,17 @@ async def run_all(
     dry_run: bool = False,
     on_done: Callable[[Outcome], None] | None = None,
 ) -> RunResult:
-    eval_settings = prepare_workspace(settings, work_dir, max_budget_usd=max_budget_usd)
+    eval_settings = resolve_as_of(
+        prepare_workspace(settings, work_dir, max_budget_usd=max_budget_usd)
+    )
     runtime = HubRuntime(
         settings=eval_settings,
         store=AppStore(eval_settings.app_db_path),
         tool_ctx=ToolContext.from_settings(eval_settings),
     )
     started = time.monotonic()
+    # Cases use dates relative to the data's "today"; fill them in now.
+    cases = [render_case(c, eval_settings.as_of_date) for c in cases]
     references = await compute_references(cases, runtime)
     if dry_run:
         return RunResult([], references, eval_settings, time.monotonic() - started)
