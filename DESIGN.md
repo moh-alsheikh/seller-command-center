@@ -780,3 +780,15 @@ The PDF printed to 4 A4 pages, with tables expanded and RTL text correct.
 **Like-for-like comparisons.** `compare_previous_year` shifts the *same* date window back a
 year. A partial current month (1–13 Nov 2026) is therefore compared with 1–13 Nov 2025, not
 with all of November 2025.
+
+**Live check (2026-11-18, through the real web UI protocol).**
+- *"Show me 2026 revenue."* → `sales_analyst` and `report_designer` ran in parallel. The
+  report ("2026 Revenue: Monthly Trend and Country Mix") had 2 charts. 2 interactive charts
+  arrived in the chat; the PDF and Excel links returned 200. 23 s, **$0.057**.
+- *"نتائج مبيعات 2026"* → an Arabic report with 3 charts (monthly 2026 vs 2025, by country,
+  top 10 products). The Arabic summary noted on its own that November is partial. 39 s,
+  **$0.100**.
+
+The designer picked curated sources for all its charts, as its prompt asks. Figures
+cross-check with earlier runs (gross £8,893,724.07 = the eval ground truth; October
+£1,408,116.91 matches the report's own table).
