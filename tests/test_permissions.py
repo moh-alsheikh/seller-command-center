@@ -124,9 +124,18 @@ async def test_broker_resolves_from_another_task(store):
     assert broker.resolve(approval_id, approved=False) is False  # already decided
 
 
-async def test_launcher_is_forced_to_run_in_the_foreground(store):
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"run_in_background": True},  # the hub asked for background
+        {},  # the hub left it out: this CLI version then defaults to background
+        {"run_in_background": False},
+    ],
+)
+async def test_launcher_always_runs_in_the_foreground(store, extra):
     policy = make_policy(store)
-    inp = {"subagent_type": "sales_analyst", "prompt": "p", "run_in_background": True}
+    inp = {"subagent_type": "sales_analyst", "prompt": "p", **extra}
     result = await policy("Agent", inp, hub_ctx())
     assert isinstance(result, PermissionResultAllow)
+    # Always written explicitly: an absent field means "background" to the CLI.
     assert result.updated_input == {**inp, "run_in_background": False}

@@ -211,7 +211,11 @@ def test_build_options_wiring(runtime):
     assert opts.can_use_tool is policy
     assert opts.max_turns == runtime.settings.max_turns
     assert opts.max_budget_usd == runtime.settings.max_budget_usd
-    assert opts.env == {"ANTHROPIC_API_KEY": "sk-test"}
+    assert opts.env == {
+        "ANTHROPIC_API_KEY": "sk-test",
+        # Specialists must finish within the request (the CLI can background them by itself).
+        "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+    }
     assert set(opts.mcp_servers) == {"sales", "customers", "inventory", "pricing", "catalog",
                                      "reports", "actions", "memory"}  # fmt: skip
     assert len(opts.agents) == 6

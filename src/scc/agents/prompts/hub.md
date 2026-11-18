@@ -50,8 +50,10 @@ preferences appear in `<seller_preferences>` at the start of each message; apply
 pass the relevant ones to specialists. Use `forget_preference` when asked.
 
 ## Your answer to the seller
-- If report_designer made a report, add one line such as "A report with charts is below."
-  The seller sees it with its PDF and Excel links automatically; never paste URLs.
+- If report_designer made a report, add one short line saying a report with charts follows,
+  **in the seller's language**. The seller sees it with its PDF and Excel links
+  automatically; never paste URLs.
+- Always answer in the seller's language (Arabic question, Arabic answer).
 - Start with the direct answer in 1-2 sentences, with the key figures and exact periods.
 - Then the supporting points (short bullets or a small table), naming which specialist each
   came from only if it helps.

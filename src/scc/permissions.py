@@ -11,7 +11,7 @@ permission model is one short, testable function:
 
     tool                                  hub (agent_id None)       a spoke (agent_id set)
     -----------------------------------   -----------------------   ----------------------
-    Agent / Task (start a sub-agent)      allow (forced foreground) deny (no nesting)
+    Agent / Task (start a sub-agent)      allow, always foreground  deny (no nesting)
     read-only data tools (mcp__sales__..) DENY: rule 1, delegate    allow
     memory tools                          allow                     deny
     write tools (save_listing_draft, ..)  ASK THE SELLER            deny (rule 2)
@@ -170,14 +170,12 @@ class ToolPolicy:
         if tool_name in LAUNCHER_TOOLS:
             if in_spoke:
                 return self._deny(tool_name, "Specialists cannot start other agents.")
-            # Force foreground runs. The Agent tool accepts run_in_background; the live smoke
-            # test showed the hub using it, ending its turn with "still running" before any
-            # report arrived. A request must finish with the specialists' answers in it.
-            if tool_input.get("run_in_background"):
-                return PermissionResultAllow(
-                    updated_input={**tool_input, "run_in_background": False}
-                )
-            return PermissionResultAllow()
+            # ALWAYS force a foreground run, by writing run_in_background=False explicitly.
+            # Two live findings: (1) the hub sometimes sets run_in_background=true; (2) when
+            # the hub leaves the field out, this CLI version runs the agent in the background
+            # by default ("Async agent launched"). Either way the hub's turn would end with
+            # "still running" before the specialists' answers arrive.
+            return PermissionResultAllow(updated_input={**tool_input, "run_in_background": False})
 
         if tool_name in self.spoke_tools:
             if in_spoke:

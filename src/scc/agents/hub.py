@@ -20,7 +20,9 @@ to a design rule or a finding from scripts/check_sdk.py:
     strict_mcp_config=True     must not depend on whose machine it runs on, and must not pick
                                up extra MCP servers from .mcp.json files.
     max_turns, max_budget_usd  per-request guard rails (config.py).
-    env                        passes ANTHROPIC_API_KEY from .env to the CLI subprocess.
+    env                        passes ANTHROPIC_API_KEY from .env to the CLI subprocess, and
+                               CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 so specialists always
+                               finish within the request (no background agents).
 """
 
 from __future__ import annotations
@@ -130,7 +132,13 @@ def build_options(
         on_decision=audit_decision,
     )
 
-    env = {}
+    # Specialists must finish INSIDE the request, so the answer contains their results.
+    # This CLI can run sub-agents in the background: when asked (run_in_background=true) and
+    # also on its own ("auto-background"), even when the hub leaves the flag out. Seen live:
+    # "Async agent launched", then the hub ended its turn with "still running". Rewriting the
+    # Agent input in can_use_tool did not stop it, so background tasks are switched off for
+    # the whole CLI process. The policy still writes run_in_background=False as a 2nd layer.
+    env = {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
     if s.anthropic_api_key:
         env["ANTHROPIC_API_KEY"] = s.anthropic_api_key.get_secret_value()
 

@@ -294,9 +294,12 @@ Results (CLI 2.1.325, SDK 0.2.182, 2026-11-15):
 
 **Then the live smoke test found one more:** the hub set `run_in_background: true` on its
 `Agent` calls, and ended its turn with "both specialists are still running" before any report
-arrived. The fix has three layers: the policy rewrites the input to `run_in_background: false`
-(the guarantee), each spoke has `AgentDefinition(background=False)`, and the hub prompt says to
-wait.
+arrived. The fix at the time was three layers: the policy rewrites the input to
+`run_in_background: false`, each spoke has `AgentDefinition(background=False)`, and the hub
+prompt says to wait. *(Correction, later: the input rewrite turned out not to be enough. The
+CLI can background agents by itself. The real guarantee is now
+`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`; see "Fix: specialists sometimes ran in the
+background" at the end.)*
 
 ### One permission policy for every call (`src/scc/permissions.py`)
 `allowed_tools=[]` on purpose. Anything listed there is auto-approved and **never reaches**
@@ -792,3 +795,38 @@ with all of November 2025.
 The designer picked curated sources for all its charts, as its prompt asks. Figures
 cross-check with earlier runs (gross £8,893,724.07 = the eval ground truth; October
 £1,408,116.91 matches the report's own table).
+
+---
+
+## Fix: specialists sometimes ran in the background (found from a seller's chat)
+
+**Symptom.** In the web UI, *"نمو المبيعات في آخر ١٦ شهر"* (sales growth over the last 16
+months) ended after 8 seconds with "two specialists are still working". The follow-up
+*"ETA"* got "no set time", and the answer only arrived with the next message, more than 3
+minutes later.
+
+**Diagnosis** (audit log plus the CLI's own transcript of the session): every `Agent` call
+returned `"Async agent launched"`. In that chat the hub's `Agent` inputs had **no**
+`run_in_background` field. In the sessions that worked, the field was present. The
+bundled CLI contains *auto-background* settings (`CLAUDE_AUTO_BACKGROUND_TASKS`,
+`task_local_agent_auto_background`): it can run sub-agents in the background **by itself**.
+
+**The M4 fix had never actually worked.** In M4 the policy rewrote `run_in_background:
+true` to `false`. The replay showed that rewriting the `Agent` input in `can_use_tool` does
+not stop the CLI from going async. The earlier successes were the hub obeying its prompt,
+not the policy.
+
+**Fix.** `build_options` sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` in the CLI's
+environment. That switches off every background-task feature, so a specialist always
+finishes inside the request. The policy still writes `run_in_background=False` on every
+`Agent` call as a second layer.
+
+**Verified live, same conditions** (the hub again omitted the flag): 0 async launches, and
+the full answer plus a 3-chart report in one turn (41 s, $0.118). The warehouse report
+question also completed in one turn with 4 charts ($0.053). The investigation's live runs
+cost $0.23 in total.
+
+**Lesson (interview point):** an end-to-end test that *passes* can still hide a broken
+safety mechanism. The `Agent`-input rewrite was never exercised, because the hub happened
+to set the flag itself in those runs. Checking the CLI's own transcript (what was actually
+sent) rather than our intent is what found it.
