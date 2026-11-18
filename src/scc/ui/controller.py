@@ -12,6 +12,7 @@ logic is unit-tested with a fake view, and the Chainlit file stays a thin adapte
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from typing import Protocol
@@ -61,6 +62,9 @@ class ChatView(Protocol):
     async def ask_approval(self, text: str, timeout_s: float) -> bool | None:
         """Show Approve/Deny buttons. True/False, or None if nobody clicked in time."""
 
+    async def show_report(self, report: dict) -> None:
+        """Show a finished report: its charts and links to the PDF page and the Excel file."""
+
 
 class ChatController:
     def __init__(self, view: ChatView, *, approval_timeout_s: float):
@@ -68,6 +72,7 @@ class ChatController:
         self.approval_timeout_s = approval_timeout_s
         self._spoke_started: dict[str, float] = {}
         self._approval_tasks: set[asyncio.Task] = set()
+        self._reports: list[dict] = []  # shown after the answer, not in the middle of it
 
     # --- events from AgentSession.ask() --------------------------------------------------
 
@@ -100,6 +105,9 @@ class ChatController:
             )
         elif isinstance(event, ToolReturned):
             await v.step_end(event.tool_use_id, render.pretty(event.output), event.is_error)
+            report = report_from_result(event)
+            if report:
+                self._reports.append(report)
         elif isinstance(event, SpokeText):
             pass  # the spoke's report also arrives in SpokeFinished; show it once, there
         elif isinstance(event, SpokeFinished):
@@ -112,6 +120,9 @@ class ChatController:
             if event.is_error:
                 await v.notice(render.error_message(event.subtype))
             await v.footer(render.footer(event.num_turns, event.duration_ms, event.cost_usd))
+            for report in self._reports:
+                await v.show_report(report)
+            self._reports.clear()
 
     # --- approvals ------------------------------------------------------------------------
 
@@ -145,3 +156,19 @@ class ChatController:
             broker.resolve(req.id, approved=answer, decided_by="seller")
             if not answer:
                 await self.view.notice("Declined. Nothing was changed.")
+
+
+def report_from_result(event: ToolReturned) -> dict | None:
+    """The report described by a successful create_report result, or None.
+
+    The tool returns our usual JSON envelope; its "result" holds report_id, title, url,
+    excel_url and the chart titles (see ReportInfo.to_result).
+    """
+    if event.is_error or not event.name.endswith("__create_report"):
+        return None
+    try:
+        result = json.loads(event.output).get("result") or {}
+    except (ValueError, AttributeError):
+        log.warning("Could not read create_report result")
+        return None
+    return result if result.get("report_id") else None

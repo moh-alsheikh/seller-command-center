@@ -13,6 +13,9 @@ Routes:
     GET /api/sessions                 recent chats with request count and cost
     GET /api/sessions/{id}/trace      one chat's requests (cost, turns) and audit log
     GET /api/audit                    the latest audit records
+    GET /api/reports                  generated reports (title, session, chart count)
+    GET /reports/{id}                 a report page (charts; "Save as PDF" button)
+    GET /reports/{id}/data.xlsx       the report's data as Excel
     /                                 the Chainlit seller UI
 
 The API is read-only on purpose: every change goes through the agent and its approval flow,
@@ -26,11 +29,13 @@ Starlette matches routes in the order they were added.
 from __future__ import annotations
 
 import hmac
+import re
 from pathlib import Path
 from typing import Annotated, Any
 
+import plotly
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from scc import __version__
 from scc.agents.hub import HubRuntime, get_runtime
@@ -41,6 +46,9 @@ from scc.data.db import DatabaseMissingError, connect_readonly
 # Module level (not inside create_app): with `from __future__ import annotations`, FastAPI
 # resolves annotations by name from the module, so a function-local alias is invisible to it.
 Limit = Annotated[int, Query(ge=1, le=1000)]
+
+REPORT_ID = re.compile(r"[0-9a-f]{32}")
+PLOTLY_JS = Path(plotly.__file__).parent / "package_data" / "plotly.min.js"
 
 CHAINLIT_TARGET = str(Path(__file__).resolve().parents[1] / "ui" / "chainlit_app.py")
 
@@ -117,11 +125,44 @@ def create_app(runtime: HubRuntime | None = None, *, mount_ui: bool = True) -> F
             "audit": rt.store.list_audit(session_id),
         }
 
+    @api.get("/reports")
+    def reports(limit: Limit = 50) -> list[dict]:
+        return rt.store.list_reports(limit)
+
     @api.get("/audit")
     def audit(limit: Limit = 200) -> list[dict]:
         return rt.store.list_audit(limit=limit)
 
     app.include_router(api)
+
+    # --- generated reports (see scc.reports) ----------------------------------------------
+    # Outside /api on purpose: these are opened in a browser tab, which can't send a bearer
+    # token. Report ids are random 128-bit values (capability URLs), and the id format is
+    # checked before any file path is built, so "../" tricks can't reach other files.
+    @app.get("/reports/assets/plotly.min.js", include_in_schema=False)
+    def plotly_js() -> FileResponse:
+        return FileResponse(PLOTLY_JS, media_type="application/javascript")
+
+    def report_file(report_id: str, name: str) -> Path:
+        if not REPORT_ID.fullmatch(report_id):
+            raise HTTPException(status_code=404, detail="Unknown report")
+        path = rt.settings.reports_dir / report_id / name
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Unknown report")
+        return path
+
+    @app.get("/reports/{report_id}", tags=["reports"])
+    def report_page(report_id: str) -> FileResponse:
+        """The report: charts, summary and tables. Use the page's "Save as PDF" button."""
+        return FileResponse(report_file(report_id, "report.html"), media_type="text/html")
+
+    @app.get("/reports/{report_id}/data.xlsx", tags=["reports"])
+    def report_excel(report_id: str) -> FileResponse:
+        return FileResponse(
+            report_file(report_id, "data.xlsx"),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"report-{report_id[:8]}.xlsx",
+        )
 
     if mount_ui:
         # Imported here so tests (mount_ui=False) never load Chainlit's server.

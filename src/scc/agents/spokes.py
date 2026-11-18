@@ -107,6 +107,17 @@ SPOKES: dict[str, SpokeSpec] = {
         ),
         model_setting="spoke_model",
     ),
+    "report_designer": SpokeSpec(
+        description=(
+            "Use ALONGSIDE the specialist that answers, whenever the answer involves figures "
+            "over time, comparisons, rankings, shares of a whole or distributions: builds a "
+            "report for this request with charts, a printable PDF page and an Excel file. Give "
+            "it the seller's exact question, the period and the language to write in."
+        ),
+        tools=(("sales", "describe_schema"), ("reports", "create_report")),
+        model_setting="analyst_model",  # it may write SQL for charts
+        max_turns=12,
+    ),
 }
 
 

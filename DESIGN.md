@@ -707,3 +707,76 @@ pending".
 `as_of: 2026-11-13`. New offline tests cover the shift arithmetic (including a build day that
 is itself a Friday, and never shifting backwards), weekday preservation, `resolve_as_of`
 (database, override, missing database), the coverage note, and case rendering.
+
+---
+
+## After the milestones: on-the-fly reports (charts, PDF, Excel)
+
+**Goal.** When the seller asks something like "2026 revenue", they get the normal answer
+**and** a report built for that request: charts (trends, comparisons, rankings, parts of a
+whole, distributions), a printable page saved as PDF, and an Excel file with the data.
+
+**Who builds it: a 6th specialist, `report_designer`.** Building a report reads data, and
+the hub has no data tools (rule 1), so a spoke does it. The hub starts it **in parallel**
+with the specialist that answers. Its tools are `describe_schema` and `create_report`. Its
+model is Sonnet, because it may write SQL.
+
+**The agent decides what to show; code supplies every number (rule 4).** The tool takes a
+spec: title, summary, and 1–6 charts. Each chart names its data in one of two ways:
+- a **curated source** (`scc/reports/sources.py`): thin wrappers over the tested analytics,
+  i.e. `revenue_trend` (with `compare_previous_year`), `revenue_by_country` (top N + Other),
+  `top_products`, `customer_segments`, `product_trend`, `demand_forecast`, `price_points`,
+  `order_values`
+- **SQL written for this request**: what makes reports *on the fly*. It passes the same
+  `guard_sql` as the analyst's queries (rule 5) and runs on the read-only connection, capped
+  at 500 rows. The renderer checks that the named x and y columns exist and are numeric.
+
+So the model never types a figure into a chart. Every report's footer lists each chart's
+source, including the exact SQL.
+
+| The seller wants | Chart type |
+|---|---|
+| trend over time | `line`, `area` |
+| comparison | `grouped`, `column` |
+| ranking | `bar` (horizontal) |
+| parts of a whole | `pie`, `stacked` |
+| distribution | `histogram` |
+
+**Rendering (`scc/reports/`).** `charts.make_figure` builds a Plotly figure.
+`builder.build_report` fetches the data in a worker thread and builds **every figure before
+writing anything**, so an invalid chart leaves no half-written report. It then writes
+`data/reports/<id>/`: `report.html`, `chart-N.json`, `data.xlsx` (Summary sheet plus one
+sheet per chart) and `report.json` (the spec and the exact data shown).
+
+**PDF via the browser, not the server** (the owner's choice). The page has a "Save as PDF"
+button (`window.print()`) and a print stylesheet (A4, buttons hidden, data tables expanded
+by a `beforeprint` handler). This avoids a headless browser in the Docker image (Plotly's
+server-side export needs Chrome, about +300 MB) and gets perfect Arabic text shaping for
+free.
+
+**Arabic.** The page is `dir="rtl"` when the title or summary contains Arabic. Charts stay
+`dir="ltr"`: Plotly doesn't support RTL containers, and numbers, dates and product codes read
+left to right anyway.
+
+**Security.** All agent-written text is HTML-escaped, and the summary is plain paragraphs,
+never rendered Markdown, because it can echo catalogue text (untrusted). Report URLs are
+random 128-bit ids, and the id format is checked before any file path is built. Plotly's
+JavaScript is served by the app itself (no CDN).
+
+**In the chat.** The UI shows the report **after** the answer: interactive Plotly charts
+inline, plus "Open report · Save as PDF" and "Download Excel" links. Chainlit has no local
+file storage, so inline charts don't survive reopening a chat, but the links are message
+text and do.
+
+**Bugs found by looking at the rendered page** (headless Chrome screenshots, no LLM cost):
+1. **Axis values were clipped to a bare "M".** The left margin was too small. Fixed with a
+   base margin plus automargin.
+2. **Product names on ranking charts were cut off.** Plotly's automargin didn't grow enough,
+   so the left margin of horizontal bar charts is now sized from the longest label.
+3. **Charts can't sit inside an RTL container.** Each chart is wrapped in `dir="ltr"`.
+
+The PDF printed to 4 A4 pages, with tables expanded and RTL text correct.
+
+**Like-for-like comparisons.** `compare_previous_year` shifts the *same* date window back a
+year. A partial current month (1–13 Nov 2026) is therefore compared with 1–13 Nov 2025, not
+with all of November 2025.

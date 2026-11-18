@@ -29,6 +29,7 @@ from scc.runtime.events import (
     ToolCalled,
     ToolReturned,
 )
+from scc.ui.controller import report_from_result
 
 DIM, BOLD, RESET = "\033[2m", "\033[1m", "\033[0m"
 
@@ -50,6 +51,9 @@ def render(event: Event, verbose: bool) -> None:
         print(f"{DIM}<- {event.agent} {status}{RESET}", flush=True)
     elif isinstance(event, ToolCalled) and verbose:
         print(f"{DIM}   [{event.agent}] {event.name} {_short(event.input)}{RESET}", flush=True)
+    elif isinstance(event, ToolReturned) and (report := report_from_result(event)):
+        print(f"{BOLD}Report:{RESET} {report['title']} -> http://127.0.0.1:8000{report['url']} "
+              f"(open it with the web app running)", flush=True)  # fmt: skip
     elif isinstance(event, ToolReturned) and (verbose or event.is_error):
         mark = "ERROR " if event.is_error else ""
         print(f"{DIM}   [{event.agent}] {mark}{_short(event.output)}{RESET}", flush=True)

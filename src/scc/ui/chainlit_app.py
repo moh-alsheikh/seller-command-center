@@ -24,10 +24,12 @@ import hmac
 import logging
 
 import chainlit as cl
+import plotly.io as pio
 from chainlit.context import init_ws_context
 from chainlit.utils import utc_now
 
 from scc.agents.hub import get_runtime
+from scc.api.app import REPORT_ID
 from scc.runtime.agent_session import AgentSession
 from scc.ui import persistence
 from scc.ui.controller import ChatController
@@ -90,6 +92,31 @@ class ChainlitView:
     async def notice(self, text: str) -> None:
         init_ws_context(self.session)
         await cl.Message(content=text).send()
+
+    async def show_report(self, report: dict) -> None:
+        """Charts inline (interactive Plotly) plus links to the PDF page and the Excel file.
+
+        Chainlit has no local file storage, so inline charts are gone when a saved chat is
+        reopened. The links are part of the message text, so they survive; the report page
+        itself is served by our API from data/reports/<id>/.
+        """
+        report_id = str(report.get("report_id", ""))
+        if not REPORT_ID.fullmatch(report_id):
+            return
+        folder = runtime.settings.reports_dir / report_id
+        charts = sorted(folder.glob("chart-*.json"), key=lambda p: int(p.stem.split("-")[1]))
+        elements = [
+            cl.Plotly(name=f"chart-{i}", figure=pio.from_json(path.read_text()),
+                      display="inline", size="large")
+            for i, path in enumerate(charts, 1)
+        ]  # fmt: skip
+        titles = "\n".join(f"{i}. {t}" for i, t in enumerate(report.get("charts", []), 1))
+        content = (
+            f"**📊 {report.get('title', 'Report')}**\n\n{titles}\n\n"
+            f"[📄 Open report · Save as PDF]({report['url']}) · "
+            f"[⬇️ Download Excel]({report['excel_url']})"
+        )
+        await cl.Message(content=content, elements=elements).send()
 
     async def ask_approval(self, text: str, timeout_s: float) -> bool | None:
         init_ws_context(self.session)  # we may be running in the SDK's task

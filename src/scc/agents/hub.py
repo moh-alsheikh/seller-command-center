@@ -42,6 +42,7 @@ from scc.store.app_db import AppStore
 from scc.tools import ToolServer, build_servers, mcp_name, mcp_server_configs
 from scc.tools import actions as actions_tools
 from scc.tools import memory as memory_tools
+from scc.tools import reports as reports_tools
 from scc.tools._common import ToolContext
 
 LAUNCHER = "Agent"  # verified by scripts/check_sdk.py (the CLI also accepts the old "Task")
@@ -106,7 +107,12 @@ def build_options(
     }
     gated = [mcp_name(actions_tools.SERVER_KEY, t.name) for t in actions]
     hub_free = [mcp_name(memory_tools.SERVER_KEY, t.name) for t in memory]
-    spoke_tools = runtime.spoke_tool_names
+
+    # The report designer's server is also per session (reports record their session). Its
+    # tool is a SPOKE tool: allowed for specialists, denied to the hub (rule 1).
+    reports = reports_tools.build_server(runtime.tool_ctx, runtime.store, session_id, s.reports_dir)
+    spoke_servers = {**runtime.read_servers, reports.key: reports}
+    spoke_tools = [n for server in spoke_servers.values() for n in server.qualified_names]
 
     def audit_decision(tool: str, verdict: str, why: str) -> None:
         runtime.store.audit(
@@ -133,8 +139,8 @@ def build_options(
         system_prompt=render_hub_prompt(s),
         tools=[LAUNCHER],
         allowed_tools=[],
-        mcp_servers={**mcp_server_configs(runtime.read_servers), **hub_servers},
-        agents=build_spokes(runtime.read_servers, s),
+        mcp_servers={**mcp_server_configs(spoke_servers), **hub_servers},
+        agents=build_spokes(spoke_servers, s),
         can_use_tool=policy,
         hooks=build_hooks(
             store=runtime.store,

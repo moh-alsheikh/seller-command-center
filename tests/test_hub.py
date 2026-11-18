@@ -213,8 +213,10 @@ def test_build_options_wiring(runtime):
     assert opts.max_budget_usd == runtime.settings.max_budget_usd
     assert opts.env == {"ANTHROPIC_API_KEY": "sk-test"}
     assert set(opts.mcp_servers) == {"sales", "customers", "inventory", "pricing", "catalog",
-                                     "actions", "memory"}  # fmt: skip
-    assert len(opts.agents) == 5
+                                     "reports", "actions", "memory"}  # fmt: skip
+    assert len(opts.agents) == 6
+    # Reports read data, so the report tool is a SPOKE tool: denied to the hub (rule 1).
+    assert "mcp__reports__create_report" in policy.spoke_tools
 
     # The write tools are gated; none of the hub's tools are spoke data tools.
     assert policy.gated_tools == {PO, LISTING}

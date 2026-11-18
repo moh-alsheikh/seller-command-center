@@ -113,6 +113,11 @@ class Settings(BaseSettings):
         return self.data_dir / "raw"
 
     @property
+    def reports_dir(self) -> Path:
+        """Generated reports (HTML page, chart JSON, Excel), one folder per report."""
+        return self.data_dir / "reports"
+
+    @property
     def chainlit_db_path(self) -> Path:
         """Chainlit's chat history (threads, messages, steps), used when login is enabled."""
         return self.data_dir / "chainlit.sqlite"

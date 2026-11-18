@@ -49,6 +49,7 @@ plenty of data and no analyst. Every week they have the same kinds of questions:
 | "What should I restock for December, and how many?" | **Inventory planner**: demand history and seasonal forecasts |
 | "What should this cost in euros? Are my bulk prices working?" | **Pricing strategist**: price history, bulk price tiers, live exchange rates |
 | "Write a listing for my best seller." | **Listing writer**: listings built only from real sales facts |
+| "Show me 2026 revenue." | **Report designer**: alongside the answer, a report built for the request, with charts, a printable PDF page and an Excel file |
 
 A **chief of staff** (the hub agent) sits in front of the specialists. It works out which of
 them a question needs, runs independent ones in parallel, and turns their reports into one
@@ -63,6 +64,10 @@ brief the seller can act on.
   the forecast, or a listing draft saved for later.
 - **Remember standing preferences** ("focus on UK and Germany", "our target margin is 40%")
   across chats.
+- **Build a report on the fly** for data questions: charts chosen for that request (trends,
+  comparisons, rankings, shares, distributions), shown in the chat, with a printable page
+  (**Save as PDF**) and an **Excel** download. Every number in a chart comes from the
+  database, not from the model. See [Reports](#reports).
 - **Show its work**: every specialist and every tool call it made can be expanded in the UI,
   with the exact inputs and outputs.
 
@@ -286,11 +291,32 @@ Both are on when `SCC_APP_USER` and `SCC_APP_PASSWORD` are set (the defaults in
 cookies is generated on first start (`data/.chainlit_auth_secret`); set
 `CHAINLIT_AUTH_SECRET` yourself only if several servers must share it.
 
+### Reports
+
+Ask a data question such as *"2026 revenue"* or *"نتائج مبيعات 2026"* (2026 sales
+results). The chief of staff answers, and in parallel the **report designer** builds a report
+for that request:
+
+- **2–4 charts chosen for the question:** trend (line), this year vs last year (grouped
+  columns), ranking (horizontal bars), shares (donut) or distribution (histogram)
+- **In the chat:** the charts appear interactively under the answer, with
+  **📄 Open report · Save as PDF** and **⬇️ Download Excel** links
+- **The report page:** title, summary, each chart with its data table, and the sources
+  (including any SQL used). Its **Save as PDF** button produces an A4 PDF; Arabic reports are
+  laid out right to left.
+- **Where the numbers come from:** tested analytics functions, or a read-only SQL query
+  written for the request and checked by the same SQL guard. The model never types a number
+  into a chart.
+
+Reports are saved in `data/reports/<id>/`. Their links keep working after the chat is
+reopened (the inline charts don't, because Chainlit has no local file storage).
+
 ### Good questions to try
 - *How has net revenue developed month by month over the last 12 months for our top 5 countries?*
 - *Which customers in the "Can't lose them" segment spent the most, and when did they last order?*
 - *What should I restock for the rest of December? Then draft a purchase order for the top 3.*
 - *What does the Regency Cakestand cost in EUR and USD, and how do its bulk price tiers work?*
+- *Show me 2026 revenue with a report* (or in Arabic: *نتائج مبيعات 2026*)
 - *Write a listing for our best-selling product of this year and save it as a draft.*
 - *Remember: our target margin is 40%.*
 
@@ -326,6 +352,9 @@ Read-only views of the app's state, served next to the UI. Interactive docs:
 | `GET /api/drafts` | Saved listing drafts |
 | `GET /api/approvals` | Every approval request and its decision (seller, timeout, policy) |
 | `GET /api/memory` | Saved seller preferences |
+| `GET /api/reports` | Generated reports (title, session, chart count) |
+| `GET /reports/{id}` | A report page: charts, summary, data tables, sources; **Save as PDF** button |
+| `GET /reports/{id}/data.xlsx` | The report's data as Excel (Summary + one sheet per chart) |
 | `GET /api/audit?limit=200` | Latest audit records across all chats |
 
 The API is **read-only on purpose**. The only way to change anything is through the agent and
@@ -363,7 +392,7 @@ Everything is set through environment variables or `.env`. Defaults are in
 ### Offline unit tests (free, no network)
 
 ```bash
-uv run pytest        # 269 tests, ~10 seconds
+uv run pytest        # 302 tests, ~15 seconds
 make lint            # ruff check + format check
 ```
 
@@ -411,6 +440,7 @@ src/scc/
   data/                  ingest (UCI -> DuckDB), read-only connections + views, SQL guard
   analytics/             deterministic metrics: sales, RFM, cohorts, forecast, pricing, catalog
   integrations/fx.py     Frankfurter client (timeouts, retries, fallback, cache)
+  reports/               on-the-fly reports: data sources, Plotly charts, HTML/Excel builder
   tools/                 MCP tools: one server per area + hub actions and memory
   agents/                hub + 5 specialist definitions; prompts/*.md
   permissions.py         can_use_tool policy + approval broker

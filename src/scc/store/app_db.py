@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     status          TEXT NOT NULL,     -- draft (this app never sends orders anywhere)
     created_at      TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reports (
+    id              TEXT PRIMARY KEY,  -- also the folder name under data/reports/
+    session_id      TEXT,
+    title           TEXT NOT NULL,
+    chart_count     INTEGER NOT NULL,
+    created_at      TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS audit_log (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id      TEXT,
@@ -399,6 +406,21 @@ class AppStore:
         for r in rows:
             r["lines"] = json.loads(r.pop("lines_json"))
         return rows
+
+    # --- reports --------------------------------------------------------------------------
+
+    def insert_report(
+        self, report_id: str, *, session_id: str | None, title: str, chart_count: int
+    ) -> None:
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO reports (id, session_id, title, chart_count, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (report_id, session_id, title, chart_count, now()),
+            )
+
+    def list_reports(self, limit: int = 50) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM reports ORDER BY created_at DESC LIMIT ?", (limit,))
 
     # --- audit ----------------------------------------------------------------------------
 

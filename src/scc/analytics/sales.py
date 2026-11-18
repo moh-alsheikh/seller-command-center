@@ -86,3 +86,31 @@ def revenue_summary(
         """,
         {"start": start, "end": end, "country": country},
     ).df(date_as_object=True)
+
+
+def order_values(
+    con: duckdb.DuckDBPyConnection,
+    as_of: date,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    country: str | None = None,
+) -> pd.DataFrame:
+    """Gross product value of each order (distinct sales invoice) in [start, end].
+
+    For distribution charts (histograms). Columns: invoice, invoice_day, country, order_value.
+    """
+    end = min(end, as_of) if end else as_of
+    return con.execute(
+        """
+        SELECT invoice, MIN(invoice_day) AS invoice_day, MIN(country) AS country,
+               SUM(revenue) AS order_value
+        FROM sales
+        WHERE invoice_day <= $end
+          AND ($start IS NULL OR invoice_day >= $start)
+          AND ($country IS NULL OR country = $country)
+        GROUP BY invoice
+        ORDER BY invoice
+        """,
+        {"start": start, "end": end, "country": country},
+    ).df(date_as_object=True)
