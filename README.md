@@ -88,6 +88,26 @@ Each rule is explained, with the alternatives considered, in [DESIGN.md](DESIGN.
 
 ## 2. What it looks like in practice
 
+### Screenshots
+
+![The last sales transaction: invoice 581587 on 13 November 2026, with its line items and caveats](docs/Screen-1.png)
+
+*"What is the last sales transaction?"* The sales analyst queries the data and returns the
+latest invoice (13 Nov 2026, the data's "today") with its line items. The caveats say the
+figures come from the sales view (cancellations, postage and fees excluded) and that the
+dates are re-dated real transactions.
+
+![2026 sales results asked and answered in Arabic: year-to-date net revenue £8,520,271, compared with 2025](docs/Screen-2.png)
+
+*"نتائج مبيعات 2026" ("2026 sales results"), asked in Arabic.* The hub answers in the seller's
+language: year to date (1 Jan–13 Nov 2026), net revenue £8,520,271 (+2.8% on the same period
+of 2025), gross £8,893,724 and refunds £373,453, with orders, customers, best and worst
+months, top countries, suggested next steps and the cost line (*2 turns · 21.8s · $0.0750*).
+The gross figure matches the ground truth of the eval case `acc_gross_revenue_ytd`
+(£8,893,724.07).
+
+### A worked example
+
 *This example is from a run on the original 2011 dates. Since then the data has been re-dated
 to the present (see [Data and dates](#data-and-dates)), so the same question now asks about
 October vs September 2026, with different figures.*
